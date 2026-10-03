@@ -24,7 +24,7 @@ rdp.example.com {
 
 Set `PUBLIC_ORIGIN=https://rdp.example.com` exactly, without a trailing slash. Use a private network/VPN for access where possible. The gateway is bound to localhost; `guacd` has no published port. Do not expose guacd directly. HTTPS protects the iPhone-to-gateway connection; RDP handles gateway-to-desktop transport separately. Desktop destinations must exactly match the `RDP_TARGETS` allowlist.
 
-For local development, `npm ci`, then supply `RDP_TARGETS` and run `npm start` with an existing guacd on localhost:4822. `http://localhost:8080` is allowed for development; an iPhone accessing a LAN address must use HTTPS.
+For local development, `npm ci`, then supply `RDP_TARGETS` and run `npm start` with an existing guacd on localhost:4822. Plain HTTP is allowed on `localhost`, `127.0.0.1`, and RFC1918 private LAN addresses (`10.x.x.x`, `172.16–31.x.x`, and `192.168.x.x`), including from an iPhone. Set `PUBLIC_ORIGIN` to the exact LAN URL, such as `http://192.168.1.50:8080`. Normal/public addresses require HTTPS.
 
 ## Ubuntu desktop setup
 

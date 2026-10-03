@@ -43,6 +43,10 @@ test('gateway session creation without an access key, origin checks, fragmented 
     assert.equal((await post({ ...data, host: 'unapproved' })).status, 400);
     const page = await fetch(origin); assert.equal(page.status, 200); assert.equal(page.headers.get('cache-control'), 'no-store');
     const html = await page.text();
+    const policy = await fetch(origin + '/connection-policy.js');
+    assert.equal(policy.status, 200);
+    assert.equal(policy.headers.get('content-type'), 'text/javascript');
+    assert.match(await policy.text(), /export function canConnect/);
     assert.doesNotMatch(html, /gatewaySecret|gateway access key/i);
     assert.match(html, /name="username" required/);
     assert.match(html, /name="password"[^>]*required/);

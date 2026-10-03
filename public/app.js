@@ -1,5 +1,6 @@
 import Guacamole from '/guacamole.js';
 import { fit, profile } from './model.js';
+import { canConnect } from './connection-policy.js';
 const $ = id => document.getElementById(id);
 const form = $('connect'); const status = message => $('status').textContent = message;
 let profiles = []; let client = null; let generation = 0; let busy = false;
@@ -34,7 +35,7 @@ function end(message) {
 }
 form.onsubmit = async event => {
   event.preventDefault(); if (busy) return;
-  if (!window.isSecureContext) return status('Open RDP-Link over HTTPS to connect securely.');
+  if (!canConnect(location)) return status('Open RDP-Link over HTTPS to connect securely.');
   const id = ++generation; busy = true; form.querySelector('[type=submit]').disabled = true;
   try {
     const p = profile(Object.fromEntries(new FormData(form)));

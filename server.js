@@ -10,6 +10,7 @@ const tickets = new Map(); let sessions = 0;
 const files = new Map([
   ['/', ['public/index.html', 'text/html']], ['/app.js', ['public/app.js', 'text/javascript']],
   ['/model.js', ['public/model.js', 'text/javascript']], ['/style.css', ['public/style.css', 'text/css']],
+  ['/connection-policy.js', ['public/connection-policy.js', 'text/javascript']],
   ['/guacamole.js', ['node_modules/guacamole-common-js/dist/esm/guacamole-common.js', 'text/javascript']]
 ]);
 const server = http.createServer(async (req, res) => {
