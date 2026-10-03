@@ -57,12 +57,13 @@ function end(message) {
   const old = client; client = null; old?.disconnect();
   $('display').replaceChildren(); $('session').hidden = true; $('home').hidden = false;
   $('keyboard').classList.remove('visible'); $('keyboard').value = ''; $('keyboard').blur();
-  form.querySelector('[type=submit]').disabled = false; status(message);
+  $('connectButton').disabled = false; status(message);
 }
-form.onsubmit = async event => {
+async function connect(event) {
   event.preventDefault(); if (busy) return;
+  if (!form.reportValidity()) return;
   if (!canConnect(location)) return status('Open RDP-Link over HTTPS to connect securely.');
-  const id = ++generation; busy = true; form.querySelector('[type=submit]').disabled = true;
+  const id = ++generation; busy = true; $('connectButton').disabled = true;
   try {
     const p = profile(Object.fromEntries(new FormData(form)));
     const credentials = { ...p, password: form.elements.password.value };
@@ -122,7 +123,10 @@ form.onsubmit = async event => {
     };
     current.connect(`ticket=${encodeURIComponent(ticket)}`);
   } catch (error) { if (id === generation) end(error.message || 'Unable to connect'); }
-};
+}
+// Connect has no native submission action, even if a module fails to load.
+$('connectButton').onclick = connect;
+form.onsubmit = connect;
 $('disconnect').onclick = () => end('Disconnected. Enter credentials to reconnect.');
 // A cached page may resume with its existing client; do not discard it on suspend.
 window.addEventListener('pagehide', event => { if (!event.persisted) end('Disconnected'); });

@@ -43,10 +43,25 @@ test('gateway session creation without an access key, origin checks, fragmented 
     assert.equal((await post({ ...data, host: 'unapproved' })).status, 400);
     const page = await fetch(origin); assert.equal(page.status, 200); assert.equal(page.headers.get('cache-control'), 'no-store');
     const html = await page.text();
-    const policy = await fetch(origin + '/connection-policy.js');
-    assert.equal(policy.status, 200);
-    assert.equal(policy.headers.get('content-type'), 'text/javascript');
-    assert.match(await policy.text(), /export function canConnect/);
+    // Every browser module import must be served with a JavaScript MIME type.
+    // A missing import prevents initialization and used to expose native form submission.
+    const pendingModules = ['/app.js']; const checkedModules = new Set();
+    while (pendingModules.length) {
+      const path = pendingModules.pop();
+      if (checkedModules.has(path)) continue;
+      checkedModules.add(path);
+      const module = await fetch(origin + path);
+      assert.equal(module.status, 200, path);
+      assert.equal(module.headers.get('content-type'), 'text/javascript', path);
+      assert.equal(module.headers.get('content-disposition'), null, path);
+      const source = await module.text();
+      for (const match of source.matchAll(/import\s+.*?from\s+['"]([^'"]+)['"]/g)) {
+        pendingModules.push(new URL(match[1], origin + path).pathname);
+      }
+    }
+    assert.ok(checkedModules.has('/zoom.js'));
+    assert.equal(page.headers.get('content-type'), 'text/html');
+    assert.equal(page.headers.get('content-disposition'), null);
     assert.doesNotMatch(html, /gatewaySecret|gateway access key/i);
     assert.match(html, /name="username" required/);
     assert.match(html, /name="password"[^>]*required/);

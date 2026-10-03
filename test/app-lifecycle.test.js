@@ -11,9 +11,9 @@ test('rotation while connecting and connected preserves the ticket, client and t
   const nodes = new Map(); const listeners = new Map(); const timers = new Map(); let timerID = 0;
   const node = id => {
     if (!nodes.has(id)) nodes.set(id, { value: '', hidden: false, clientWidth: 844, clientHeight: 310,
-      style: {}, setAttribute() {}, addEventListener() {}, replaceChildren() {}, add() {}, focus() {}, blur() {},
+      reportValidity: () => true, style: {}, setAttribute() {}, addEventListener() {}, replaceChildren() {}, add() {}, focus() {}, blur() {},
       classList: { remove() {}, toggle() {}, contains() { return false; } },
-      querySelector: () => node('submit') });
+      querySelector: () => node('connectButton') });
     return nodes.get(id);
   };
   node('session').hidden = true;
@@ -47,7 +47,16 @@ test('rotation while connecting and connected preserves the ticket, client and t
   const source = (await readFile(new URL('../public/app.js', import.meta.url), 'utf8')).replace(/^import .*;\n/gm, '');
   vm.runInContext(source, context);
   const flush = () => { const work = [...timers.values()]; timers.clear(); work.forEach(fn => fn()); };
-  const pending = node('connect').onsubmit({ preventDefault() {} });
+  const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.match(html, /<button id="connectButton" type="button">Connect<\/button>/);
+  assert.doesNotMatch(html.match(/<form id="connect">[\s\S]*?<\/form>/)[0], /type="submit"|\baction=|\bhref=|\bdownload=/);
+  const click = new Event('click', { cancelable: true });
+  const pending = node('connectButton').onclick(click);
+  assert.equal(click.defaultPrevented, true);
+  const submit = new Event('submit', { cancelable: true });
+  await node('connect').onsubmit(submit);
+  assert.equal(submit.defaultPrevented, true);
+  assert.equal(fetchCount, 1);
   assert.equal(posted.width, 844); assert.equal(posted.height, 310);
   node('viewport').clientWidth = 390; node('viewport').clientHeight = 650;
   listeners.get('resize')(); listeners.get('observer')(); flush();
@@ -65,5 +74,5 @@ test('rotation while connecting and connected preserves the ticket, client and t
   assert.equal(clients.length, 1); assert.equal(tunnels, 1); assert.equal(clients[0].disconnects, 0);
   node('disconnect').onclick(); flush();
   assert.equal(clients[0].disconnects, 1); assert.equal(node('session').hidden, true);
-  assert.equal(node('home').hidden, false); assert.equal(node('submit').disabled, false);
+  assert.equal(node('home').hidden, false); assert.equal(node('connectButton').disabled, false);
 });
