@@ -176,3 +176,24 @@ test('trackpad taps use cumulative travel, suppress release-only movement and re
   h.fire('gesturestart', []); h.fire('touchend', [], [[100, 100]]);
   assert.equal(h.taps.length, 0);
 });
+
+test('pointer mapping and trackpad bounds use arbitrary server desktop dimensions', () => {
+  for (const [width, height] of [[2560, 1440], [1366, 768], [1080, 1920], [320, 200]]) {
+    const z = zoomState(); z.layout(width, height, 390, 650);
+    z.pinch(2, 0, 0); z.pan(-30, 20);
+    const t = z.layout(width, height, 844, 310);
+    const rect = { left: (844 - width * t.scale) / 2 + t.x,
+      top: (310 - height * t.scale) / 2 + t.y };
+    const cursor = { x: width / 3, y: height / 4 };
+    const mapped = remotePoint({ x: rect.left + cursor.x * t.scale,
+      y: rect.top + cursor.y * t.scale }, rect, t.scale, width, height);
+    assert.ok(Math.abs(mapped.x - cursor.x) < 1e-10);
+    assert.ok(Math.abs(mapped.y - cursor.y) < 1e-10);
+    const moved = z.followCursor(cursor, 20, 10);
+    assert.equal(moved.x, cursor.x + 20 / t.scale);
+    assert.equal(moved.y, cursor.y + 10 / t.scale);
+    assert.deepEqual(z.followCursor(moved, 1e6, 1e6), { x: width - 1, y: height - 1 });
+    assert.deepEqual(remotePoint({ x: 1e6, y: 1e6 }, rect, t.scale, width, height),
+      { x: width - 1, y: height - 1 });
+  }
+});

@@ -4,7 +4,6 @@ import { readFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { instruction as ins, takeInstruction } from './lib/protocol.js';
-import { desktopSize } from './public/model.js';
 const origin = process.env.PUBLIC_ORIGIN || 'http://localhost:8080';
 const targets = new Set((process.env.RDP_TARGETS || 'host.docker.internal:3389').split(','));
 const tickets = new Map(); let sessions = 0;
@@ -31,7 +30,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(400).end('Check credentials and the allowed desktop address'); return;
       }
       const ticket = randomBytes(32).toString('hex');
-      tickets.set(ticket, { ...data, ...desktopSize(data.width, data.height) });
+      tickets.set(ticket, { host: data.host, port: data.port, username: data.username, password: data.password });
       setTimeout(() => tickets.delete(ticket), 10000).unref();
       res.writeHead(201, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ticket })); return;
     }
@@ -67,8 +66,9 @@ function bridge(ws, config) {
         } else if (phase === 'args' && op === 'args') {
           const params = { hostname: config.host, port: config.port, username: config.username, password: config.password,
             security: 'any', 'ignore-cert': process.env.RDP_IGNORE_CERT === 'true' ? 'true' : 'false',
-            'resize-method': 'display-update', 'disable-audio': 'true', 'enable-drive': 'false' };
-          tcp.write(ins('size', config.width, config.height, 96) + ins('audio') + ins('video') + ins('image', 'image/png', 'image/jpeg') + ins('connect', ...args.map(k => k.startsWith('VERSION_') ? 'VERSION_1_5_0' : params[k] ?? '')));
+            'resize-method': 'none', 'disable-audio': 'true', 'enable-drive': 'false' };
+          // Desktop Sharing owns its geometry. Omit the optional size hint.
+          tcp.write(ins('audio') + ins('video') + ins('image', 'image/png', 'image/jpeg') + ins('connect', ...args.map(k => k.startsWith('VERSION_') ? 'VERSION_1_5_0' : params[k] ?? '')));
           config.password = ''; phase = 'ready';
         } else if (phase === 'ready' && op === 'ready') {
           clearTimeout(timer); phase = 'stream'; ws.send(ins('', args[0]));
@@ -86,7 +86,8 @@ function bridge(ws, config) {
       while ((parsed = takeInstruction(input))) {
         input = parsed.rest;
         if (parsed.values[0] === '') ws.send(ins(...parsed.values));
-        else tcp.write(ins(...parsed.values));
+        // Never forward client viewport dimensions to the shared desktop.
+        else if (parsed.values[0] !== 'size') tcp.write(ins(...parsed.values));
       }
       if (input) stop('Invalid client message');
     } catch { stop('Invalid client message'); }

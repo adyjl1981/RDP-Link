@@ -6,8 +6,3 @@ export function profile(input) {
   if (!input.host.trim() || /[\s/:]/.test(input.host) || !Number.isInteger(port) || port < 1 || port > 65535 || !input.username.trim()) throw Error('Enter a host, valid port and username.');
   return { name: input.name.trim() || input.host.trim(), host: input.host.trim(), port, username: input.username.trim() };
 }
-
-// Fixed MVP desktop geometry, independent of phone orientation and keyboard.
-export function desktopSize() {
-  return { width: 1920, height: 1080 };
-}

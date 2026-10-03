@@ -1,5 +1,5 @@
 import Guacamole from '/guacamole.js';
-import { desktopSize, profile } from './model.js';
+import { profile } from './model.js';
 import { canConnect } from './connection-policy.js';
 import { viewportController, usableViewport } from './viewport.js';
 import { zoomState, installGestures, remotePoint } from './zoom.js';
@@ -101,7 +101,6 @@ async function connect(event) {
     document.activeElement?.blur();
     $('home').hidden = true; $('session').hidden = false;
     $('desktopName').textContent = p.name; resizeViewport();
-    Object.assign(credentials, desktopSize());
     status('Connecting…');
     const response = await fetch('/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credentials), signal: AbortSignal.timeout(15000) });
     credentials.password = '';

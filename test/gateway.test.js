@@ -14,9 +14,9 @@ test('gateway session creation without an access key, origin checks, fragmented 
       buffered += chunk; let parsed;
       while ((parsed = takeInstruction(buffered))) {
         buffered = parsed.rest; received.push(parsed.values);
-        if (parsed.values[0] === 'select') socket.write(ins('args', 'VERSION_1_5_0', 'hostname', 'port', 'username', 'password', 'ignore-cert', 'resize-method'));
+        if (parsed.values[0] === 'select') socket.write(ins('args', 'VERSION_1_5_0', 'hostname', 'port', 'username', 'password', 'ignore-cert', 'resize-method', 'width', 'height'));
         if (parsed.values[0] === 'connect') {
-          const frame = ins('ready', '$test') + ins('size', 0, 1920, 1080);
+          const frame = ins('ready', '$test') + ins('size', 0, 2560, 1440);
           socket.write(frame.slice(0, 7)); setTimeout(() => socket.write(frame.slice(7)), 10);
         }
       }
@@ -71,14 +71,18 @@ test('gateway session creation without an access key, origin checks, fragmented 
     const messages = []; ws.on('message', msg => messages.push(msg.toString()));
     await once(ws, 'open');
     while (messages.length < 2) await once(ws, 'message');
-    assert.deepEqual(messages.slice(0, 2), [ins('', '$test'), ins('size', 0, 1920, 1080)]);
-    assert.deepEqual(received.find(x => x[0] === 'connect'), ['connect', 'VERSION_1_5_0', 'desktop', '3389', 'me', 'p,;🔐', 'false', 'display-update']);
-    assert.deepEqual(received.find(x => x[0] === 'size'), ['size', '1920', '1080', '96']);
+    assert.deepEqual(messages.slice(0, 2), [ins('', '$test'), ins('size', 0, 2560, 1440)]);
+    assert.deepEqual(received.find(x => x[0] === 'connect'), ['connect', 'VERSION_1_5_0', 'desktop', '3389', 'me', 'p,;🔐', 'false', 'none', '', '']);
+    assert.equal(received.some(x => x[0] === 'size'), false);
     const ping = once(ws, 'message'); ws.send(ins('', 'ping', 123)); assert.equal((await ping)[0].toString(), ins('', 'ping', 123));
     const input = once(upstream, 'data'); ws.send(ins('mouse', 100, 200, 1)); await input;
     assert.ok(received.some(x => x.join('|') === 'mouse|100|200|1'));
-    const resized = once(upstream, 'data'); ws.send(ins('size', 390, 650)); await resized;
-    assert.ok(received.some(x => x.join('|') === 'size|390|650'));
+    // A following input acts as a barrier: all preceding size messages were handled.
+    const rotated = once(upstream, 'data');
+    ws.send(ins('size', 390, 650) + ins('size', 844, 310) + ins('mouse', 321, 456, 0));
+    await rotated;
+    assert.ok(received.some(x => x.join('|') === 'mouse|321|456|0'));
+    assert.equal(received.some(x => x[0] === 'size'), false);
     assert.equal(ws.readyState, WebSocket.OPEN);
     const reused = new WebSocket(`ws://127.0.0.1:${port}/tunnel?ticket=${ticket}`, 'guacamole', { origin });
     await once(reused, 'error');

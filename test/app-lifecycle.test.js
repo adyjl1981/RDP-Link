@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-import { profile, desktopSize } from '../public/model.js';
+import { profile } from '../public/model.js';
 import { canConnect } from '../public/connection-policy.js';
 import { viewportController, usableViewport } from '../public/viewport.js';
 import { zoomState, installGestures, remotePoint } from '../public/zoom.js';
@@ -30,7 +30,7 @@ test('rotation while connecting and connected preserves the ticket, client and t
   }
   class Mouse { onEach() {} }
   Mouse.State = class {};
-  const context = vm.createContext({ profile, desktopSize, canConnect, viewportController, usableViewport, zoomState, installGestures, remotePoint,
+  const context = vm.createContext({ profile, canConnect, viewportController, usableViewport, zoomState, installGestures, remotePoint,
     Guacamole: { Client, Mouse, WebSocketTunnel: class { constructor() { tunnels++; } } },
     document: { getElementById: node, activeElement: { blur() {} }, documentElement: { style: { setProperty() {} } } },
     window: { innerHeight: 390, visualViewport: { height: 390, addEventListener: (name, fn) => listeners.set('visual:' + name, fn) }, addEventListener: (name, fn) => listeners.set(name, fn) },
@@ -57,7 +57,7 @@ test('rotation while connecting and connected preserves the ticket, client and t
   await node('connect').onsubmit(submit);
   assert.equal(submit.defaultPrevented, true);
   assert.equal(fetchCount, 1);
-  assert.equal(posted.width, 1920); assert.equal(posted.height, 1080);
+  assert.equal(Object.hasOwn(posted, 'width'), false); assert.equal(Object.hasOwn(posted, 'height'), false);
   node('viewport').clientWidth = 390; node('viewport').clientHeight = 650;
   listeners.get('resize')(); listeners.get('observer')(); flush();
   assert.equal(fetchCount, 1); assert.equal(node('session').hidden, false);
