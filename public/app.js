@@ -1,6 +1,7 @@
 import Guacamole from '/guacamole.js';
-import { fit, profile } from './model.js';
+import { desktopSize, profile } from './model.js';
 import { canConnect } from './connection-policy.js';
+import { viewportController } from './viewport.js';
 const $ = id => document.getElementById(id);
 const form = $('connect'); const status = message => $('status').textContent = message;
 let profiles = []; let client = null; let generation = 0; let busy = false;
@@ -20,14 +21,21 @@ $('forget').onclick = () => {
   profiles.splice(Number($('profiles').value), 1); persist(); list();
 };
 function persist() { try { localStorage.setItem('rdp-profiles', JSON.stringify(profiles)); } catch { status('Profile could not be saved on this device.'); } }
-function scale() {
-  if (!client) return;
-  const d = client.getDisplay(); const v = $('viewport');
-  d.scale(fit(d.getWidth(), d.getHeight(), v.clientWidth, v.clientHeight));
+const measure = () => ({ width: $('viewport').clientWidth, height: $('viewport').clientHeight });
+const sizing = viewportController({ getClient: () => client, measure });
+const scale = sizing.fit;
+function resizeViewport() {
+  // Safari's visual viewport also tracks the software keyboard and browser bars.
+  document.documentElement.style.setProperty('--session-height', `${window.visualViewport?.height ?? window.innerHeight}px`);
+  sizing.resize();
 }
-new ResizeObserver(scale).observe($('viewport'));
+new ResizeObserver(() => sizing.resize()).observe($('viewport'));
+window.addEventListener('resize', resizeViewport);
+window.visualViewport?.addEventListener('resize', resizeViewport);
+window.addEventListener('pageshow', resizeViewport);
+resizeViewport();
 function end(message) {
-  generation++; busy = false;
+  generation++; busy = false; sizing.reset();
   const old = client; client = null; old?.disconnect();
   $('display').replaceChildren(); $('session').hidden = true; $('home').hidden = false;
   $('keyboard').classList.remove('visible'); $('keyboard').value = ''; $('keyboard').blur();
@@ -41,6 +49,10 @@ form.onsubmit = async event => {
     const p = profile(Object.fromEntries(new FormData(form)));
     const credentials = { ...p, password: form.elements.password.value };
     form.elements.password.value = '';
+    document.activeElement?.blur();
+    $('home').hidden = true; $('session').hidden = false;
+    $('desktopName').textContent = p.name; resizeViewport();
+    Object.assign(credentials, desktopSize(measure().width, measure().height));
     status('Connecting…');
     const response = await fetch('/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credentials), signal: AbortSignal.timeout(15000) });
     credentials.password = '';
@@ -60,7 +72,7 @@ form.onsubmit = async event => {
     current.onerror = error => { if (client === current) end(error.message || 'Connection failed. Enter credentials to reconnect.'); };
     current.onstatechange = state => {
       if (client !== current) return;
-      if (state === 3) { status('Connected'); scale(); }
+      if (state === 3) { status('Connected'); resizeViewport(); }
       if (state === 5) end('Disconnected. Enter credentials to reconnect.');
     };
     current.onclipboard = (stream, mimetype) => {
@@ -76,10 +88,11 @@ form.onsubmit = async event => {
   } catch (error) { if (id === generation) end(error.message || 'Unable to connect'); }
 };
 $('disconnect').onclick = () => end('Disconnected. Enter credentials to reconnect.');
-window.addEventListener('pagehide', () => end('Disconnected'));
+// A cached page may resume with its existing client; do not discard it on suspend.
+window.addEventListener('pagehide', event => { if (!event.persisted) end('Disconnected'); });
 window.addEventListener('offline', () => end('Network lost. Enter credentials to reconnect.'));
 const key = value => { if (!client) return; client.sendKeyEvent(1, value); client.sendKeyEvent(0, value); };
-$('keyboardButton').onclick = () => { $('keyboard').classList.toggle('visible'); if ($('keyboard').classList.contains('visible')) $('keyboard').focus(); else $('keyboard').blur(); scale(); };
+$('keyboardButton').onclick = () => { $('keyboard').classList.toggle('visible'); if ($('keyboard').classList.contains('visible')) $('keyboard').focus(); else $('keyboard').blur(); resizeViewport(); };
 // iOS software keyboards emit input/composition rather than reliable keydown events.
 function type(text) {
   for (const char of text) {

@@ -22,7 +22,7 @@ rdp.example.com {
 }
 ```
 
-Set `PUBLIC_ORIGIN=https://rdp.example.com` exactly, without a trailing slash. Use a private network/VPN for access where possible. The gateway is bound to localhost; `guacd` has no published port. Do not expose guacd directly. HTTPS protects the iPhone-to-gateway connection; RDP handles gateway-to-desktop transport separately. Desktop destinations must exactly match the `RDP_TARGETS` allowlist.
+Set `PUBLIC_ORIGIN=https://rdp.example.com` exactly, without a trailing slash. Use a private network/VPN for access where possible. Compose publishes the gateway on the LAN on port 8080; `guacd` has no published port. Do not expose guacd directly. HTTPS protects the iPhone-to-gateway connection; RDP handles gateway-to-desktop transport separately. Desktop destinations must exactly match the `RDP_TARGETS` allowlist.
 
 For local development, `npm ci`, then supply `RDP_TARGETS` and run `npm start` with an existing guacd on localhost:4822. Plain HTTP is allowed on `localhost`, `127.0.0.1`, and RFC1918 private LAN addresses (`10.x.x.x`, `172.16–31.x.x`, and `192.168.x.x`), including from an iPhone. Set `PUBLIC_ORIGIN` to the exact LAN URL, such as `http://192.168.1.50:8080`. Normal/public addresses require HTTPS.
 
@@ -37,7 +37,7 @@ Certificate validation is enabled by default. For a known desktop with a self-si
 ## Using the MVP
 
 - Save named profiles containing address, port and username only. Enter the RDP password for every connection; it is never written to local storage or URLs.
-- The desktop starts at 1280×720. The actual size reported by Ubuntu is fitted to the available screen with its aspect ratio intact. Rotate the phone for a larger view. It does not renegotiate resolution when the keyboard opens.
+- The desktop requests the available phone viewport in CSS pixels at 96 DPI. Rotation, browser bars and the software keyboard update that request through the existing session, using RDP display-update. Ubuntu must support dynamic resizing; otherwise its reported desktop is fitted without stretching. Landscape provides the widest workspace.
 - Touch acts as a trackpad: move the pointer, tap to click, two-finger tap for right click, two-finger movement for scrolling, hold and move to drag. A physical mouse also works.
 - Tap Keyboard for the iPhone software keyboard. Text and basic special keys are forwarded. Hardware modifier shortcuts and complex input methods need further device testing.
 - Clipboard exchanges text explicitly. Received desktop text appears in the Clipboard panel; send its contents to Ubuntu or tap Copy to iPhone. Clipboard availability depends on the Ubuntu RDP server and Safari permissions.
