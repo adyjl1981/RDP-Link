@@ -12,7 +12,7 @@ test('pinch anchors the desktop, pans within bounds, and resets proportionally',
 
 test('rotation and letterboxing clamp pan without losing zoom', () => {
   const z = zoomState(); z.layout(800, 400, 800, 400); z.pinch(2, 0, 0); z.pan(300, 200);
-  assert.deepEqual(z.layout(300, 150, 300, 600), { zoom: 2, x: 150, y: 0 });
+  assert.deepEqual(z.layout(300, 150, 300, 600), { zoom: 2, x: 150, y: 0, scale: 2 });
   assert.deepEqual(z.pinch(0.01, 0, 0), { zoom: 1, x: 0, y: 0 });
 });
 
@@ -63,5 +63,24 @@ test('absolute pointer mapping accounts for fit, zoom, translation and bounds', 
     const rect = { left: -73, top: 41 };
     assert.deepEqual(remotePoint({ x: rect.left + 123 * scale, y: rect.top + 78 * scale }, rect, scale, 800, 600), { x: 123, y: 78 });
     assert.deepEqual(remotePoint({ x: -10000, y: 10000 }, rect, scale, 800, 600), { x: 0, y: 599 });
+  }
+});
+
+
+test('pinch lower bound and reset use fitted scale below one in both orientations', () => {
+  const z = zoomState();
+  for (const [vw, vh] of [[390, 650], [844, 310]]) {
+    z.reset();
+    const baseline = Math.min(vw / 1920, vh / 1080);
+    assert.equal(z.layout(1920, 1080, vw, vh).scale, baseline);
+    assert.deepEqual(z.pan(100, 100), { zoom: 1, x: 0, y: 0 });
+    z.pinch(2, 0, 0); z.pan(100, 100);
+    assert.equal(z.layout(1920, 1080, vw, vh).scale, baseline * 2);
+    z.pinch(0.001, 0, 0);
+    const fitted = z.layout(1920, 1080, vw, vh);
+    assert.deepEqual(fitted, { zoom: 1, x: 0, y: 0, scale: baseline });
+    assert.ok(1920 * fitted.scale <= vw && 1080 * fitted.scale <= vh);
+    z.pinch(3, 0, 0); z.reset();
+    assert.equal(z.layout(1920, 1080, vw, vh).scale, baseline);
   }
 });

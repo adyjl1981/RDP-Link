@@ -2,7 +2,7 @@
 
 /* Keep the remote canvas out of intrinsic viewport sizing during rotation. */
 body:has(#session:not([hidden])){overflow:hidden}
-#session{position:fixed;inset:0;height:var(--session-height,100dvh);padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#session{position:fixed;inset:0 auto auto 0;width:var(--session-width,100dvw);height:var(--session-height,100dvh);padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 #session header,#session footer,#keyboard{flex-shrink:0}
 #session header strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 #viewport{min-width:0;width:100%;contain:size layout}

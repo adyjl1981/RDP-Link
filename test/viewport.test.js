@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { desktopSize } from '../public/model.js';
-import { viewportController } from '../public/viewport.js';
+import { viewportController, usableViewport } from '../public/viewport.js';
 
 test('desktop requests readable CSS pixel sizes in both orientations and bounds invalid/huge input', () => {
   assert.deepEqual(desktopSize(390, 650), { width: 390, height: 650 });
@@ -47,4 +47,23 @@ test('disconnect cancels pending resize; reconnect sends size even if the viewpo
   h.client(h.original); h.sizing.resize(); h.flush();
   assert.deepEqual(h.requests.at(-1), [390, 630]);
   h.sizing.reset(); h.sizing.resize(); h.flush(); assert.equal(h.requests.length, 3);
+});
+
+
+test('portrait to landscape discards stale Safari geometry and resizes the live client', () => {
+  const h = harness(); h.state(3);
+  const phone = { innerWidth: 390, innerHeight: 650, visualViewport: { width: 390, height: 650 } };
+  h.size(usableViewport(phone)); h.sizing.resize(); h.flush();
+  phone.innerWidth = 844; phone.innerHeight = 390;
+  h.size(usableViewport(phone)); h.sizing.resize(); h.flush();
+  phone.visualViewport = { width: 844, height: 310 };
+  h.size(usableViewport(phone)); h.sizing.resize(); h.flush();
+  assert.deepEqual(h.requests, [[390, 650], [844, 390], [844, 310]]);
+  assert.equal(h.scales.at(-1), 310 / 1080);
+});
+
+
+test('keyboard height reduction uses visual viewport even when its aspect flips', () => {
+  assert.deepEqual(usableViewport({ innerWidth: 390, innerHeight: 650,
+    visualViewport: { width: 390, height: 260 } }), { width: 390, height: 260 });
 });

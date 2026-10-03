@@ -1,7 +1,7 @@
 import Guacamole from '/guacamole.js';
 import { desktopSize, profile } from './model.js';
 import { canConnect } from './connection-policy.js';
-import { viewportController } from './viewport.js';
+import { viewportController, usableViewport } from './viewport.js';
 import { zoomState, installGestures, remotePoint } from './zoom.js';
 const $ = id => document.getElementById(id);
 const form = $('connect'); const status = message => $('status').textContent = message;
@@ -25,8 +25,8 @@ function persist() { try { localStorage.setItem('rdp-profiles', JSON.stringify(p
 const measure = () => ({ width: $('viewport').clientWidth, height: $('viewport').clientHeight });
 const zoom = zoomState();
 const sizing = viewportController({ getClient: () => client, isConnected: () => connected, measure, render(display, fit, width, height) {
-  const transform = zoom.layout(display.getWidth() * fit, display.getHeight() * fit, width, height);
-  display.scale(fit * transform.zoom);
+  const transform = zoom.layout(display.getWidth(), display.getHeight(), width, height);
+  display.scale(transform.scale);
   $('display').style.transform = `translate(${transform.x}px, ${transform.y}px)`;
 } });
 installGestures($('viewport'), zoom, () => sizing.fit(), {
@@ -50,7 +50,9 @@ $('controlsButton').onclick = () => {
 const scale = sizing.fit;
 function resizeViewport() {
   // Safari's visual viewport also tracks the software keyboard and browser bars.
-  document.documentElement.style.setProperty('--session-height', `${window.visualViewport?.height ?? window.innerHeight}px`);
+  const viewport = usableViewport(window);
+  document.documentElement.style.setProperty('--session-width', `${viewport.width}px`);
+  document.documentElement.style.setProperty('--session-height', `${viewport.height}px`);
   sizing.resize();
 }
 new ResizeObserver(() => sizing.resize()).observe($('viewport'));
@@ -58,7 +60,7 @@ window.addEventListener('resize', resizeViewport);
 window.visualViewport?.addEventListener('resize', resizeViewport);
 window.addEventListener('pageshow', resizeViewport);
 // iOS can report the old visual viewport during the first orientation event.
-const orientationResize = () => { resizeViewport(); setTimeout(resizeViewport, 350); setTimeout(resizeViewport, 750); };
+const orientationResize = () => { zoom.reset(); resizeViewport(); setTimeout(resizeViewport, 350); setTimeout(resizeViewport, 750); };
 window.addEventListener('orientationchange', orientationResize);
 window.screen?.orientation?.addEventListener('change', orientationResize);
 resizeViewport();

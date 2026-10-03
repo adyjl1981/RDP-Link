@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { profile, desktopSize } from '../public/model.js';
 import { canConnect } from '../public/connection-policy.js';
-import { viewportController } from '../public/viewport.js';
+import { viewportController, usableViewport } from '../public/viewport.js';
 import { zoomState, installGestures, remotePoint } from '../public/zoom.js';
 
 test('rotation while connecting and connected preserves the ticket, client and tunnel; explicit disconnect still works', async () => {
@@ -19,10 +19,10 @@ test('rotation while connecting and connected preserves the ticket, client and t
   node('session').hidden = true;
   node('connect').elements = { password: { value: 'secret' } };
   const values = { name: 'Desktop', host: 'desktop', port: '3389', username: 'me' };
-  let resolveFetch; let posted; let fetchCount = 0; let tunnels = 0; const clients = [];
+  let currentScale = 1; let resolveFetch; let posted; let fetchCount = 0; let tunnels = 0; const clients = [];
   class Client {
     constructor() { clients.push(this); this.state = 1; this.requests = []; this.mouse = []; this.disconnects = 0; }
-    getDisplay() { return { getElement: () => ({ addEventListener() {}, getBoundingClientRect: () => ({ left: -100, top: 20 }) }), getWidth: () => 844, getHeight: () => 310, scale() {}, getScale: () => 2, showCursor() {} }; }
+    getDisplay() { return { getElement: () => ({ addEventListener() {}, getBoundingClientRect: () => ({ left: -100, top: 20 }) }), getWidth: () => 1920, getHeight: () => 1080, scale(value) { currentScale = value; }, getScale: () => currentScale, showCursor() {} }; }
     sendMouseState(state) { this.mouse.push({ ...state }); }
     sendSize(...size) { this.requests.push(size); }
     connect(query) { this.query = query; this.state = 3; this.onstatechange(3); }
@@ -30,7 +30,7 @@ test('rotation while connecting and connected preserves the ticket, client and t
   }
   class Mouse { onEach() {} }
   Mouse.State = class {};
-  const context = vm.createContext({ profile, desktopSize, canConnect, viewportController, zoomState, installGestures, remotePoint,
+  const context = vm.createContext({ profile, desktopSize, canConnect, viewportController, usableViewport, zoomState, installGestures, remotePoint,
     Guacamole: { Client, Mouse, WebSocketTunnel: class { constructor() { tunnels++; } } },
     document: { getElementById: node, activeElement: { blur() {} }, documentElement: { style: { setProperty() {} } } },
     window: { innerHeight: 390, visualViewport: { height: 390, addEventListener: (name, fn) => listeners.set('visual:' + name, fn) }, addEventListener: (name, fn) => listeners.set(name, fn) },
@@ -65,15 +65,24 @@ test('rotation while connecting and connected preserves the ticket, client and t
   assert.equal(clients.length, 1); assert.equal(tunnels, 1);
   assert.equal(clients[0].query, 'ticket=single-ticket');
   assert.deepEqual(clients[0].requests, [[390, 650]]);
+  assert.equal(currentScale, 390 / 1920);
   node('viewport').clientWidth = 844; node('viewport').clientHeight = 310;
   listeners.get('orientationchange')(); listeners.get('observer')(); flush();
   listeners.get('pagehide')({ persisted: true }); listeners.get('pageshow')(); flush();
   assert.equal(clients.length, 1); assert.equal(tunnels, 1); assert.equal(clients[0].disconnects, 0);
   assert.deepEqual(clients[0].requests, [[390, 650], [844, 310]]);
-  const touchEvent = touches => ({ touches, changedTouches: [{ clientX: 146, clientY: 176 }], preventDefault() {}, stopImmediatePropagation() {} });
-  node('viewport').handlers.get('touchstart')(touchEvent([{ clientX: 146, clientY: 176 }]));
+  assert.equal(currentScale, 310 / 1080);
+  const point = { clientX: -100 + 123 * currentScale, clientY: 20 + 78 * currentScale };
+  const touchEvent = touches => ({ touches, changedTouches: [point], preventDefault() {}, stopImmediatePropagation() {} });
+  node('viewport').handlers.get('touchstart')(touchEvent([point]));
   node('viewport').handlers.get('touchend')(touchEvent([]));
-  assert.deepEqual(clients[0].mouse, [{ x: 123, y: 78, left: true }, { x: 123, y: 78, left: false }]);
+  assert.equal(clients[0].mouse.length, 2);
+  for (const state of clients[0].mouse) {
+    assert.ok(Math.abs(state.x - 123) < 1e-10);
+    assert.ok(Math.abs(state.y - 78) < 1e-10);
+  }
+  assert.equal(clients[0].mouse[0].left, true);
+  assert.equal(clients[0].mouse[1].left, false);
   node('controlsButton').onclick(); node('fitButton').onclick(); flush();
   assert.equal(clients.length, 1); assert.equal(tunnels, 1); assert.equal(clients[0].disconnects, 0);
   node('disconnect').onclick(); flush();

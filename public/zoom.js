@@ -1,14 +1,21 @@
+import { fit } from './model.js';
+
 // Display-only zoom; all dimensions and offsets are CSS pixels.
 export function zoomState() {
   let zoom = 1, x = 0, y = 0;
-  let width = 0, height = 0, viewWidth = 0, viewHeight = 0;
+  let width = 0, height = 0, viewWidth = 0, viewHeight = 0, baseline = 1;
   function clamp() {
-    x = Math.max(-Math.max(0, (width * zoom - viewWidth) / 2), Math.min(Math.max(0, (width * zoom - viewWidth) / 2), x));
-    y = Math.max(-Math.max(0, (height * zoom - viewHeight) / 2), Math.min(Math.max(0, (height * zoom - viewHeight) / 2), y));
+    x = Math.max(-Math.max(0, (width * baseline * zoom - viewWidth) / 2), Math.min(Math.max(0, (width * baseline * zoom - viewWidth) / 2), x));
+    y = Math.max(-Math.max(0, (height * baseline * zoom - viewHeight) / 2), Math.min(Math.max(0, (height * baseline * zoom - viewHeight) / 2), y));
     return { zoom, x, y };
   }
   return {
-    layout(w, h, vw, vh) { width = w; height = h; viewWidth = vw; viewHeight = vh; return clamp(); },
+    layout(w, h, vw, vh) {
+      width = w; height = h; viewWidth = vw; viewHeight = vh;
+      baseline = fit(w, h, vw, vh);
+      const transform = clamp();
+      return { ...transform, scale: baseline * zoom };
+    },
     pinch(factor, anchorX, anchorY, dx = 0, dy = 0) {
       const next = Math.max(1, Math.min(4, zoom * factor));
       const ratio = next / zoom;
@@ -16,7 +23,7 @@ export function zoomState() {
       y = anchorY - (anchorY - y) * ratio + dy;
       zoom = next; return clamp();
     },
-    pan(dx, dy) { x += dx; y += dy; return clamp(); },
+    pan(dx, dy) { if (zoom > 1) { x += dx; y += dy; } return clamp(); },
     reset() { zoom = 1; x = y = 0; return clamp(); },
     get() { return { zoom, x, y }; }
   };
