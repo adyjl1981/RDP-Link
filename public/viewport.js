@@ -1,7 +1,7 @@
 import { desktopSize, fit } from './model.js';
 
 // Resize only the current client: never construct a tunnel or end a session here.
-export function viewportController({ getClient, measure, schedule = setTimeout, cancel = clearTimeout, render }) {
+export function viewportController({ getClient, isConnected = () => true, measure, schedule = setTimeout, cancel = clearTimeout, render }) {
   let timer; let lastClient; let lastSize = '';
   function fitDisplay() {
     const client = getClient(); const { width, height } = measure();
@@ -14,7 +14,7 @@ export function viewportController({ getClient, measure, schedule = setTimeout, 
   function update() {
     timer = undefined;
     const client = getClient(); const measured = measure();
-    if (!client || client.getState() !== 3 || measured.width <= 0 || measured.height <= 0) return;
+    if (!client || !isConnected(client) || measured.width <= 0 || measured.height <= 0) return;
     const { width, height } = desktopSize(measured.width, measured.height);
     const size = `${width}x${height}`;
     if (client !== lastClient || size !== lastSize) {

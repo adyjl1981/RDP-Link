@@ -5,13 +5,13 @@ import vm from 'node:vm';
 import { profile, desktopSize } from '../public/model.js';
 import { canConnect } from '../public/connection-policy.js';
 import { viewportController } from '../public/viewport.js';
-import { zoomState, installGestures } from '../public/zoom.js';
+import { zoomState, installGestures, remotePoint } from '../public/zoom.js';
 
 test('rotation while connecting and connected preserves the ticket, client and tunnel; explicit disconnect still works', async () => {
   const nodes = new Map(); const listeners = new Map(); const timers = new Map(); let timerID = 0;
   const node = id => {
     if (!nodes.has(id)) nodes.set(id, { value: '', hidden: false, clientWidth: 844, clientHeight: 310,
-      reportValidity: () => true, style: {}, setAttribute() {}, addEventListener() {}, replaceChildren() {}, add() {}, focus() {}, blur() {},
+      reportValidity: () => true, style: {}, setAttribute() {}, handlers: new Map(), addEventListener(type, fn) { this.handlers.set(type, fn); }, replaceChildren() {}, add() {}, focus() {}, blur() {},
       classList: { remove() {}, toggle() {}, contains() { return false; } },
       querySelector: () => node('connectButton') });
     return nodes.get(id);
@@ -21,16 +21,16 @@ test('rotation while connecting and connected preserves the ticket, client and t
   const values = { name: 'Desktop', host: 'desktop', port: '3389', username: 'me' };
   let resolveFetch; let posted; let fetchCount = 0; let tunnels = 0; const clients = [];
   class Client {
-    constructor() { clients.push(this); this.state = 1; this.requests = []; this.disconnects = 0; }
-    getDisplay() { return { getElement: () => ({ addEventListener() {} }), getWidth: () => 844, getHeight: () => 310, scale() {} }; }
-    getState() { return this.state; }
+    constructor() { clients.push(this); this.state = 1; this.requests = []; this.mouse = []; this.disconnects = 0; }
+    getDisplay() { return { getElement: () => ({ addEventListener() {}, getBoundingClientRect: () => ({ left: -100, top: 20 }) }), getWidth: () => 844, getHeight: () => 310, scale() {}, getScale: () => 2, showCursor() {} }; }
+    sendMouseState(state) { this.mouse.push({ ...state }); }
     sendSize(...size) { this.requests.push(size); }
     connect(query) { this.query = query; this.state = 3; this.onstatechange(3); }
     disconnect() { this.disconnects++; this.state = 5; this.onstatechange(5); }
   }
   class Mouse { onEach() {} }
-  Mouse.Touchpad = Mouse;
-  const context = vm.createContext({ profile, desktopSize, canConnect, viewportController, zoomState, installGestures,
+  Mouse.State = class {};
+  const context = vm.createContext({ profile, desktopSize, canConnect, viewportController, zoomState, installGestures, remotePoint,
     Guacamole: { Client, Mouse, WebSocketTunnel: class { constructor() { tunnels++; } } },
     document: { getElementById: node, activeElement: { blur() {} }, documentElement: { style: { setProperty() {} } } },
     window: { innerHeight: 390, visualViewport: { height: 390, addEventListener: (name, fn) => listeners.set('visual:' + name, fn) }, addEventListener: (name, fn) => listeners.set(name, fn) },
@@ -66,10 +66,14 @@ test('rotation while connecting and connected preserves the ticket, client and t
   assert.equal(clients[0].query, 'ticket=single-ticket');
   assert.deepEqual(clients[0].requests, [[390, 650]]);
   node('viewport').clientWidth = 844; node('viewport').clientHeight = 310;
-  listeners.get('visual:resize')(); listeners.get('observer')(); flush();
+  listeners.get('orientationchange')(); listeners.get('observer')(); flush();
   listeners.get('pagehide')({ persisted: true }); listeners.get('pageshow')(); flush();
   assert.equal(clients.length, 1); assert.equal(tunnels, 1); assert.equal(clients[0].disconnects, 0);
   assert.deepEqual(clients[0].requests, [[390, 650], [844, 310]]);
+  const touchEvent = touches => ({ touches, changedTouches: [{ clientX: 146, clientY: 176 }], preventDefault() {}, stopImmediatePropagation() {} });
+  node('viewport').handlers.get('touchstart')(touchEvent([{ clientX: 146, clientY: 176 }]));
+  node('viewport').handlers.get('touchend')(touchEvent([]));
+  assert.deepEqual(clients[0].mouse, [{ x: 123, y: 78, left: true }, { x: 123, y: 78, left: false }]);
   node('controlsButton').onclick(); node('fitButton').onclick(); flush();
   assert.equal(clients.length, 1); assert.equal(tunnels, 1); assert.equal(clients[0].disconnects, 0);
   node('disconnect').onclick(); flush();

@@ -22,48 +22,59 @@ export function zoomState() {
   };
 }
 
-export function installGestures(element, state, render, { touch = () => {}, claim = () => {} } = {}) {
-  let previous = null, owned = false, lastTap = 0, start = null;
+export function remotePoint(point, rect, scale, width, height) {
+  return { x: Math.max(0, Math.min(width - 1, (point.x - rect.left) / scale)),
+    y: Math.max(0, Math.min(height - 1, (point.y - rect.top) / scale)) };
+}
+
+// Own touch input at the viewport, including letterboxed areas. Cancel native
+// gestures from the first touch so Safari cannot take over a later pinch.
+export function installGestures(element, state, render, { tap = () => {} } = {}) {
+  let previous = [], start = null, pinching = false, moved = false, lastTap = 0;
   const points = touches => Array.from(touches, t => ({ x: t.clientX, y: t.clientY }));
   const center = ps => ({ x: ps.reduce((v, p) => v + p.x, 0) / ps.length, y: ps.reduce((v, p) => v + p.y, 0) / ps.length });
   const distance = ps => Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y);
   const consume = e => { e.preventDefault(); e.stopImmediatePropagation(); };
+  const options = { capture: true, passive: false };
   element.addEventListener('touchstart', e => {
+    consume(e);
     previous = points(e.touches);
-    if (previous.length === 1) start = { ...previous[0], time: Date.now() };
-    else start = null;
-    const nextOwned = owned || previous.length > 1 || state.get().zoom > 1;
-    if (nextOwned && !owned) claim();
-    owned = nextOwned;
-    if (owned) consume(e); else touch(e);
-  }, { capture: true, passive: false });
+    if (previous.length === 1 && !pinching) {
+      start = { ...previous[0], time: Date.now() }; moved = false;
+    } else { pinching = true; start = null; lastTap = 0; }
+  }, options);
   element.addEventListener('touchmove', e => {
+    consume(e);
     const ps = points(e.touches);
-    if (owned) {
-      consume(e);
-      if (previous && ps.length === previous.length) {
-        const a = center(previous), b = center(ps);
-        if (ps.length === 2) {
-          const rect = element.getBoundingClientRect();
-          state.pinch(distance(ps) / Math.max(1, distance(previous)), a.x - rect.left - rect.width / 2, a.y - rect.top - rect.height / 2, b.x - a.x, b.y - a.y);
-        } else if (ps.length === 1) state.pan(b.x - a.x, b.y - a.y);
+    if (start && ps[0] && Math.hypot(ps[0].x - start.x, ps[0].y - start.y) > 12) moved = true;
+    if (ps.length && ps.length === previous.length) {
+      const a = center(previous), b = center(ps);
+      if (ps.length === 2) {
+        const rect = element.getBoundingClientRect();
+        state.pinch(distance(ps) / Math.max(1, distance(previous)), a.x - rect.left - rect.width / 2, a.y - rect.top - rect.height / 2, b.x - a.x, b.y - a.y);
         render();
+      } else if (ps.length === 1 && state.get().zoom > 1 && (moved || pinching)) {
+        state.pan(b.x - a.x, b.y - a.y); render();
       }
     }
-    if (!owned) touch(e);
     previous = ps;
-  }, { capture: true, passive: false });
+  }, options);
   element.addEventListener('touchend', e => {
-    if (owned) consume(e);
+    consume(e);
     const t = e.changedTouches[0];
-    if (!e.touches.length && start && t && Date.now() - start.time < 250 && Math.hypot(t.clientX - start.x, t.clientY - start.y) < 12) {
-      const now = Date.now();
-      if (now - lastTap < 300) { consume(e); claim(); state.reset(); render(); lastTap = 0; }
-      else lastTap = now;
+    if (!e.touches.length) {
+      if (start && t && !pinching && !moved && Date.now() - start.time < 300
+          && Math.hypot(t.clientX - start.x, t.clientY - start.y) < 12) {
+        const now = Date.now();
+        if (lastTap && now - lastTap < 300 && state.get().zoom > 1) { state.reset(); render(); lastTap = 0; }
+        else { tap({ x: t.clientX, y: t.clientY }); lastTap = now; }
+      }
+      start = null; pinching = false; moved = false;
     }
-    if (!owned && !e.defaultPrevented) touch(e);
     previous = points(e.touches);
-    if (!e.touches.length) { owned = false; start = null; }
-  }, { capture: true, passive: false });
-  element.addEventListener('touchcancel', e => { claim(); if (owned) consume(e); previous = null; owned = false; start = null; }, { capture: true, passive: false });
+  }, options);
+  element.addEventListener('touchcancel', e => {
+    consume(e); previous = []; start = null; pinching = false; moved = false; lastTap = 0;
+  }, options);
+  for (const type of ['gesturestart', 'gesturechange', 'gestureend']) element.addEventListener(type, consume, options);
 }

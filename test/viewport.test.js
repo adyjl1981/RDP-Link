@@ -18,7 +18,7 @@ function harness() {
   const display = { getWidth: () => 1920, getHeight: () => 1080, scale: value => scales.push(value) };
   const original = { getState: () => state, getDisplay: () => display, sendSize: (...args) => requests.push(args) };
   let client = original;
-  const sizing = viewportController({ getClient: () => client, measure: () => size,
+  const sizing = viewportController({ getClient: () => client, isConnected: () => state === 3, measure: () => size,
     schedule: callback => { pending = callback; return callback; }, cancel: () => { pending = undefined; } });
   return { sizing, original, requests, scales, flush: () => pending?.(),
     size: value => size = value, state: value => state = value, client: value => client = value };
