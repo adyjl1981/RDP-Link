@@ -24,18 +24,35 @@ $('forget').onclick = () => {
 function persist() { try { localStorage.setItem('rdp-profiles', JSON.stringify(profiles)); } catch { status('Profile could not be saved on this device.'); } }
 const measure = () => ({ width: $('viewport').clientWidth, height: $('viewport').clientHeight });
 const zoom = zoomState();
+let remoteCursor = null;
 const sizing = viewportController({ getClient: () => client, isConnected: () => connected, measure, render(display, _scale, width, height) {
   const transform = zoom.layout(display.getWidth(), display.getHeight(), width, height);
   display.scale(transform.scale);
   $('display').style.transform = `translate(${transform.x}px, ${transform.y}px)`;
 } });
 installGestures($('viewport'), zoom, () => sizing.fit(), {
-  tap: point => {
+  move: (dx, dy) => {
     if (!client || !connected) return;
     const display = client.getDisplay();
-    const rect = display.getElement().getBoundingClientRect();
+    sizing.fit();
+    remoteCursor = zoom.followCursor(remoteCursor ?? {
+      x: display.getWidth() / 2, y: display.getHeight() / 2
+    }, dx, dy);
+    sizing.fit();
     const state = new Guacamole.Mouse.State();
-    Object.assign(state, remotePoint(point, rect, display.getScale(), display.getWidth(), display.getHeight()));
+    Object.assign(state, remoteCursor);
+    display.showCursor(true);
+    client.sendMouseState(state);
+    // Guacamole rounds protocol coordinates; retain subpixel local placement
+    // so zoom does not pull the visible cursor away from the viewport edge.
+    display.moveCursor(remoteCursor.x, remoteCursor.y);
+  },
+  tap: () => {
+    if (!client || !connected) return;
+    const display = client.getDisplay();
+    remoteCursor ??= { x: display.getWidth() / 2, y: display.getHeight() / 2 };
+    const state = new Guacamole.Mouse.State();
+    Object.assign(state, remoteCursor);
     display.showCursor(true);
     state.left = true; client.sendMouseState(state);
     state.left = false; client.sendMouseState(state);
@@ -65,7 +82,7 @@ window.addEventListener('orientationchange', orientationResize);
 window.screen?.orientation?.addEventListener('change', orientationResize);
 resizeViewport();
 function end(message) {
-  generation++; busy = false; connected = false; sizing.reset(); zoom.reset();
+  generation++; busy = false; connected = false; sizing.reset(); zoom.reset(); remoteCursor = null;
   $('sessionControls').hidden = true; $('controlsButton').setAttribute('aria-expanded', 'false');
   const old = client; client = null; old?.disconnect();
   $('display').replaceChildren(); $('session').hidden = true; $('home').hidden = false;
@@ -106,8 +123,12 @@ async function connect(event) {
       const rect = display.getElement().getBoundingClientRect();
       const state = new Guacamole.Mouse.State(e.state);
       Object.assign(state, e.state, remotePoint({ x: pointer.clientX, y: pointer.clientY }, rect, display.getScale(), display.getWidth(), display.getHeight()));
+      remoteCursor = { x: state.x, y: state.y };
       current.sendMouseState(state); pointer = null;
-    } else current.sendMouseState(e.state, true); } };
+    } else {
+      remoteCursor = { x: e.state.x / display.getScale(), y: e.state.y / display.getScale() };
+      current.sendMouseState(e.state, true);
+    } } };
     new Guacamole.Mouse(display.getElement()).onEach(['mousedown', 'mousemove', 'mouseup'], sendMouse);
     current.onerror = error => { if (client === current) end(error.message || 'Connection failed. Enter credentials to reconnect.'); };
     current.onstatechange = state => {
