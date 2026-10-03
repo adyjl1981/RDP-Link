@@ -6,7 +6,7 @@ import { once } from 'node:events';
 import WebSocket from 'ws';
 import { instruction as ins, takeInstruction } from '../lib/protocol.js';
 
-test('gateway authorization, fragmented handshake, input, ping, ticket reuse and cleanup', { timeout: 15000 }, async () => {
+test('gateway session creation without an access key, origin checks, fragmented handshake, input, ping, ticket reuse and cleanup', { timeout: 15000 }, async () => {
   let upstream; let buffered = ''; const received = [];
   const mock = net.createServer(socket => {
     upstream = socket; socket.setEncoding('utf8');
@@ -26,17 +26,26 @@ test('gateway authorization, fragmented handshake, input, ping, ticket reuse and
   // Reserve a free gateway port for the child process.
   const reservation = net.createServer(); await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
   const port = reservation.address().port; await new Promise(resolve => reservation.close(resolve));
-  const origin = `http://127.0.0.1:${port}`; const secret = 'test-only-key-12345678901234567890';
-  const child = spawn(process.execPath, ['server.js'], { env: { ...process.env, PORT: String(port), PUBLIC_ORIGIN: origin, GATEWAY_SECRET: secret, RDP_TARGETS: 'desktop:3389', GUACD_PORT: String(mock.address().port) }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const origin = `http://127.0.0.1:${port}`;
+  const env = { ...process.env }; delete env.GATEWAY_SECRET;
+  const child = spawn(process.execPath, ['server.js'], { env: { ...env, PORT: String(port), PUBLIC_ORIGIN: origin, RDP_TARGETS: 'desktop:3389', GUACD_PORT: String(mock.address().port) }, stdio: ['ignore', 'pipe', 'pipe'] });
   let ws;
   try {
     await once(child.stdout, 'data');
-    const data = { host: 'desktop', port: 3389, username: 'me', password: 'p,;🔐', gatewaySecret: secret };
+    const data = { host: 'desktop', port: 3389, username: 'me', password: 'p,;🔐' };
     const post = (body, requestOrigin = origin) => fetch(origin + '/session', { method: 'POST', headers: { Origin: requestOrigin, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     assert.equal((await post(data, 'https://evil.example')).status, 403);
-    assert.equal((await post({ ...data, gatewaySecret: 'wrong' })).status, 401);
+    for (const field of ['username', 'password']) {
+      for (const value of ['', null, 123]) assert.equal((await post({ ...data, [field]: value })).status, 400);
+      const missing = { ...data }; delete missing[field];
+      assert.equal((await post(missing)).status, 400);
+    }
     assert.equal((await post({ ...data, host: 'unapproved' })).status, 400);
     const page = await fetch(origin); assert.equal(page.status, 200); assert.equal(page.headers.get('cache-control'), 'no-store');
+    const html = await page.text();
+    assert.doesNotMatch(html, /gatewaySecret|gateway access key/i);
+    assert.match(html, /name="username" required/);
+    assert.match(html, /name="password"[^>]*required/);
     const response = await post(data); assert.equal(response.status, 201);
     const { ticket } = await response.json();
     ws = new WebSocket(`ws://127.0.0.1:${port}/tunnel?ticket=${ticket}`, 'guacamole', { origin });

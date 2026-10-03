@@ -38,11 +38,11 @@ form.onsubmit = async event => {
   const id = ++generation; busy = true; form.querySelector('[type=submit]').disabled = true;
   try {
     const p = profile(Object.fromEntries(new FormData(form)));
-    const credentials = { ...p, password: form.elements.password.value, gatewaySecret: form.elements.gatewaySecret.value };
-    form.elements.password.value = ''; form.elements.gatewaySecret.value = '';
+    const credentials = { ...p, password: form.elements.password.value };
+    form.elements.password.value = '';
     status('Connecting…');
     const response = await fetch('/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credentials), signal: AbortSignal.timeout(15000) });
-    credentials.password = ''; credentials.gatewaySecret = '';
+    credentials.password = '';
     if (!response.ok) throw Error(await response.text());
     const { ticket } = await response.json(); if (id !== generation) return;
     const index = profiles.findIndex(x => x.host === p.host && x.port === p.port && x.username === p.username);

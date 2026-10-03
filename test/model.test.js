@@ -8,7 +8,7 @@ test('desktop fits portrait, landscape and keyboard-reduced view without distort
   assert.equal(fit(0, 0, 390, 600), 1);
 });
 test('profiles discard credentials and reject invalid addresses and ports', () => {
-  const p = profile({ name: '', host: 'desktop', port: '3389', username: 'me', password: 'secret', gatewaySecret: 'secret' });
+  const p = profile({ name: '', host: 'desktop', port: '3389', username: 'me', password: 'secret' });
   assert.deepEqual(p, { name: 'desktop', host: 'desktop', port: 3389, username: 'me' });
   for (const port of [0, 65536, 12.5]) assert.throws(() => profile({ ...p, port }));
   assert.throws(() => profile({ ...p, host: 'https://desktop' }));

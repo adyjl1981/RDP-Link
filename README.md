@@ -2,14 +2,14 @@
 
 An iPhone-focused RDP web client for Ubuntu desktop. Open it in Safari; optionally use **Share → Add to Home Screen**. This first version uses a small Node gateway and Apache Guacamole's `guacd` RDP engine. There is no custom RDP implementation, database, native iOS build, account system, or background reconnect service.
 
+This LAN-only development build has no separate gateway access key. Connections use the Ubuntu RDP username and password.
+
 ## Run on Ubuntu
 
 Requires Docker with Compose. In this repository:
 
 ```sh
 cp .env.example .env
-openssl rand -hex 32
-# Put the generated value in .env as GATEWAY_SECRET.
 # Set PUBLIC_ORIGIN to your HTTPS URL and RDP_TARGETS to your desktop's host:port.
 docker compose up --build -d
 ```
@@ -24,7 +24,7 @@ rdp.example.com {
 
 Set `PUBLIC_ORIGIN=https://rdp.example.com` exactly, without a trailing slash. Use a private network/VPN for access where possible. The gateway is bound to localhost; `guacd` has no published port. Do not expose guacd directly. HTTPS protects the iPhone-to-gateway connection; RDP handles gateway-to-desktop transport separately. Desktop destinations must exactly match the `RDP_TARGETS` allowlist.
 
-For local development, `npm ci`, then supply `GATEWAY_SECRET`, `RDP_TARGETS` and run `npm start` with an existing guacd on localhost:4822. `http://localhost:8080` is allowed for development; an iPhone accessing a LAN address must use HTTPS.
+For local development, `npm ci`, then supply `RDP_TARGETS` and run `npm start` with an existing guacd on localhost:4822. `http://localhost:8080` is allowed for development; an iPhone accessing a LAN address must use HTTPS.
 
 ## Ubuntu desktop setup
 
@@ -36,7 +36,7 @@ Certificate validation is enabled by default. For a known desktop with a self-si
 
 ## Using the MVP
 
-- Save named profiles containing address, port and username only. Enter the RDP password and gateway access key for every connection; neither is written to local storage or URLs.
+- Save named profiles containing address, port and username only. Enter the RDP password for every connection; it is never written to local storage or URLs.
 - The desktop starts at 1280×720. The actual size reported by Ubuntu is fitted to the available screen with its aspect ratio intact. Rotate the phone for a larger view. It does not renegotiate resolution when the keyboard opens.
 - Touch acts as a trackpad: move the pointer, tap to click, two-finger tap for right click, two-finger movement for scrolling, hold and move to drag. A physical mouse also works.
 - Tap Keyboard for the iPhone software keyboard. Text and basic special keys are forwarded. Hardware modifier shortcuts and complex input methods need further device testing.
@@ -52,7 +52,7 @@ npm test
 npm audit
 ```
 
-Tests cover profile sanitization, aspect ratio, Unicode protocol framing, authorization/origin checks, destination restrictions, single-use tickets, fragmented guacd handshakes, input, keepalive and disconnect cleanup. They use a simulated guacd, not a live Ubuntu desktop.
+Tests cover profile sanitization, aspect ratio, Unicode protocol framing, origin and RDP credential checks, destination restrictions, single-use tickets, fragmented guacd handshakes, input, keepalive and disconnect cleanup. They use a simulated guacd, not a live Ubuntu desktop.
 
 Before calling this device-ready, test on a real iPhone against your Ubuntu Wayland desktop: certificate/authentication, portrait/landscape, keyboard show/hide, text/backspace/Enter, drag/right-click/scroll, clipboard both ways, network interruption and reconnect. Remote Login and Desktop Sharing should be checked separately if both are needed. Linux development cannot validate iPhone Safari behavior without a device, and no live RDP credentials are supplied with the repository.
 

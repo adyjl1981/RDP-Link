@@ -1,15 +1,12 @@
 import http from 'node:http';
 import net from 'node:net';
 import { readFile } from 'node:fs/promises';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { instruction as ins, takeInstruction } from './lib/protocol.js';
 const origin = process.env.PUBLIC_ORIGIN || 'http://localhost:8080';
-const secret = process.env.GATEWAY_SECRET;
-if (!secret || secret.length < 24) throw Error('Set GATEWAY_SECRET to at least 24 characters');
 const targets = new Set((process.env.RDP_TARGETS || 'host.docker.internal:3389').split(','));
 const tickets = new Map(); let sessions = 0;
-const equal = value => typeof value === 'string' && Buffer.byteLength(value) === Buffer.byteLength(secret) && timingSafeEqual(Buffer.from(value), Buffer.from(secret));
 const files = new Map([
   ['/', ['public/index.html', 'text/html']], ['/app.js', ['public/app.js', 'text/javascript']],
   ['/model.js', ['public/model.js', 'text/javascript']], ['/style.css', ['public/style.css', 'text/css']],
@@ -25,13 +22,11 @@ const server = http.createServer(async (req, res) => {
       if (req.headers.origin !== origin) { res.writeHead(403).end(); return; }
       let body = ''; for await (const chunk of req) { body += chunk; if (body.length > 8192) { res.writeHead(413).end(); return; } }
       const data = JSON.parse(body);
-      if (!equal(data.gatewaySecret)) { res.writeHead(401).end('Gateway access key is incorrect'); return; }
       if (tickets.size + sessions >= 4) { res.writeHead(429).end('Gateway is busy'); return; }
       if (!targets.has(`${data.host}:${data.port}`) || !Number.isInteger(data.port) || typeof data.username !== 'string' || !data.username || typeof data.password !== 'string' || !data.password) {
         res.writeHead(400).end('Check credentials and the allowed desktop address'); return;
       }
       const ticket = randomBytes(32).toString('hex');
-      delete data.gatewaySecret;
       tickets.set(ticket, data);
       setTimeout(() => tickets.delete(ticket), 10000).unref();
       res.writeHead(201, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ticket })); return;
