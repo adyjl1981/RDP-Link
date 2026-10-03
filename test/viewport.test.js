@@ -3,14 +3,9 @@ import assert from 'node:assert/strict';
 import { desktopSize } from '../public/model.js';
 import { viewportController, usableViewport } from '../public/viewport.js';
 
-test('desktop requests readable CSS pixel sizes in both orientations and bounds invalid/huge input', () => {
-  assert.deepEqual(desktopSize(390, 650), { width: 390, height: 650 });
-  assert.deepEqual(desktopSize(844, 310), { width: 844, height: 310 });
-  for (const dimensions of [[0, 0], [NaN, 600], [Infinity, 600], ['844', 310], [undefined, undefined]]) {
-    assert.deepEqual(desktopSize(...dimensions), { width: 1280, height: 720 });
-  }
-  assert.deepEqual(desktopSize(8192, 4096), { width: 4096, height: 2048 });
-  assert.deepEqual(desktopSize(390, 100), { width: 390, height: 200 });
+test('desktop geometry is fixed across orientations and invalid viewport sizes', () => {
+  for (const size of [[390, 650], [844, 310], [0, 0], [Infinity, NaN]])
+    assert.deepEqual(desktopSize(...size), { width: 1920, height: 1080 });
 });
 
 function harness() {
@@ -24,44 +19,23 @@ function harness() {
     size: value => size = value, state: value => state = value, client: value => client = value };
 }
 
-test('landscape startup, rotation and keyboard changes resize the same connected client without duplicate requests', () => {
-  const h = harness(); h.sizing.resize(); h.flush(); assert.deepEqual(h.requests, []);
-  h.state(3); h.sizing.resize(); h.flush(); assert.deepEqual(h.requests, [[844, 310]]);
-  h.size({ width: 390, height: 650 }); h.sizing.resize();
-  h.size({ width: 390, height: 630 }); h.sizing.resize(); h.flush();
-  assert.deepEqual(h.requests, [[844, 310], [390, 630]]);
-  h.sizing.resize(); h.flush(); assert.equal(h.requests.length, 2);
-  h.size({ width: 390, height: 300 }); h.sizing.resize(); h.flush();
-  assert.deepEqual(h.requests.at(-1), [390, 300]);
-  assert.equal(h.scales.at(-1), 390 / 1920);
-  // Zero-sized transient rotation layouts cannot resize or collapse the display.
-  const scaleCount = h.scales.length;
-  h.size({ width: 0, height: 0 }); h.sizing.resize(); h.flush();
-  assert.equal(h.requests.length, 3); assert.equal(h.scales.length, scaleCount);
-});
-
-test('disconnect cancels pending resize; reconnect sends size even if the viewport is unchanged', () => {
-  const h = harness(); h.state(3); h.sizing.resize(); h.flush();
-  h.size({ width: 390, height: 630 }); h.sizing.resize(); h.sizing.reset(); h.client(null); h.flush();
-  assert.equal(h.requests.length, 1);
-  h.client(h.original); h.sizing.resize(); h.flush();
-  assert.deepEqual(h.requests.at(-1), [390, 630]);
-  h.sizing.reset(); h.sizing.resize(); h.flush(); assert.equal(h.requests.length, 3);
-});
-
-
-test('portrait to landscape discards stale Safari geometry and resizes the live client', () => {
+test('rotation, keyboard, reconnect and transient layouts never send remote resize', () => {
   const h = harness(); h.state(3);
-  const phone = { innerWidth: 390, innerHeight: 650, visualViewport: { width: 390, height: 650 } };
-  h.size(usableViewport(phone)); h.sizing.resize(); h.flush();
-  phone.innerWidth = 844; phone.innerHeight = 390;
-  h.size(usableViewport(phone)); h.sizing.resize(); h.flush();
-  phone.visualViewport = { width: 844, height: 310 };
-  h.size(usableViewport(phone)); h.sizing.resize(); h.flush();
-  assert.deepEqual(h.requests, [[390, 650], [844, 390], [844, 310]]);
-  assert.equal(h.scales.at(-1), 310 / 1080);
+  for (const size of [{ width: 390, height: 650 }, { width: 844, height: 310 }, { width: 390, height: 260 }]) {
+    h.size(size); h.sizing.resize(); h.flush();
+    assert.deepEqual(h.requests, []); assert.equal(h.scales.at(-1), 1);
+  }
+  const count = h.scales.length;
+  h.size({ width: 0, height: 0 }); h.sizing.resize();
+  assert.equal(h.scales.length, count);
+  h.sizing.reset(); h.client(null); h.sizing.resize();
+  assert.deepEqual(h.requests, []);
 });
 
+test('Safari rotation rejects stale visual dimensions', () => {
+  assert.deepEqual(usableViewport({ innerWidth: 844, innerHeight: 390,
+    visualViewport: { width: 390, height: 650 } }), { width: 844, height: 390 });
+});
 
 test('keyboard height reduction uses visual viewport even when its aspect flips', () => {
   assert.deepEqual(usableViewport({ innerWidth: 390, innerHeight: 650,

@@ -73,7 +73,7 @@ test('gateway session creation without an access key, origin checks, fragmented 
     while (messages.length < 2) await once(ws, 'message');
     assert.deepEqual(messages.slice(0, 2), [ins('', '$test'), ins('size', 0, 1920, 1080)]);
     assert.deepEqual(received.find(x => x[0] === 'connect'), ['connect', 'VERSION_1_5_0', 'desktop', '3389', 'me', 'p,;🔐', 'false', 'display-update']);
-    assert.deepEqual(received.find(x => x[0] === 'size'), ['size', '844', '310', '96']);
+    assert.deepEqual(received.find(x => x[0] === 'size'), ['size', '1920', '1080', '96']);
     const ping = once(ws, 'message'); ws.send(ins('', 'ping', 123)); assert.equal((await ping)[0].toString(), ins('', 'ping', 123));
     const input = once(upstream, 'data'); ws.send(ins('mouse', 100, 200, 1)); await input;
     assert.ok(received.some(x => x.join('|') === 'mouse|100|200|1'));

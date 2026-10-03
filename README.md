@@ -37,7 +37,7 @@ Certificate validation is enabled by default. For a known desktop with a self-si
 ## Using the MVP
 
 - Save named profiles containing address, port and username only. Enter the RDP password for every connection; it is never written to local storage or URLs.
-- The desktop requests the available phone viewport in CSS pixels at 96 DPI. Rotation, browser bars and the software keyboard update that request through the existing session, using RDP display-update. Ubuntu must support dynamic resizing; otherwise its reported desktop is fitted without stretching. Landscape provides the widest workspace.
+- Sessions request a stable 1920×1080 desktop at 96 DPI. The phone starts at 100% scale as a window over the desktop: drag with one finger to pan, tap to click, and pinch to zoom. Rotation and keyboard changes affect only the local viewport, preserving the existing connection. Fit screen is an optional overview; double-tap resets to the centered 100% viewport. Pointer coordinates account for both pan and zoom.
 - Touch acts as a trackpad: move the pointer, tap to click, two-finger tap for right click, two-finger movement for scrolling, hold and move to drag. A physical mouse also works.
 - Tap Keyboard for the iPhone software keyboard. Text and basic special keys are forwarded. Hardware modifier shortcuts and complex input methods need further device testing.
 - Clipboard exchanges text explicitly. Received desktop text appears in the Clipboard panel; send its contents to Ubuntu or tap Copy to iPhone. Clipboard availability depends on the Ubuntu RDP server and Safari permissions.

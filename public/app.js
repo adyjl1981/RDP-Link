@@ -24,7 +24,7 @@ $('forget').onclick = () => {
 function persist() { try { localStorage.setItem('rdp-profiles', JSON.stringify(profiles)); } catch { status('Profile could not be saved on this device.'); } }
 const measure = () => ({ width: $('viewport').clientWidth, height: $('viewport').clientHeight });
 const zoom = zoomState();
-const sizing = viewportController({ getClient: () => client, isConnected: () => connected, measure, render(display, fit, width, height) {
+const sizing = viewportController({ getClient: () => client, isConnected: () => connected, measure, render(display, _scale, width, height) {
   const transform = zoom.layout(display.getWidth(), display.getHeight(), width, height);
   display.scale(transform.scale);
   $('display').style.transform = `translate(${transform.x}px, ${transform.y}px)`;
@@ -41,7 +41,7 @@ installGestures($('viewport'), zoom, () => sizing.fit(), {
     state.left = false; client.sendMouseState(state);
   }
 });
-$('fitButton').onclick = () => { zoom.reset(); sizing.fit(); };
+$('fitButton').onclick = () => { zoom.fit(); sizing.fit(); };
 $('controlsButton').onclick = () => {
   const expanded = $('sessionControls').hidden;
   $('sessionControls').hidden = !expanded;
@@ -60,7 +60,7 @@ window.addEventListener('resize', resizeViewport);
 window.visualViewport?.addEventListener('resize', resizeViewport);
 window.addEventListener('pageshow', resizeViewport);
 // iOS can report the old visual viewport during the first orientation event.
-const orientationResize = () => { zoom.reset(); resizeViewport(); setTimeout(resizeViewport, 350); setTimeout(resizeViewport, 750); };
+const orientationResize = () => { resizeViewport(); setTimeout(resizeViewport, 350); setTimeout(resizeViewport, 750); };
 window.addEventListener('orientationchange', orientationResize);
 window.screen?.orientation?.addEventListener('change', orientationResize);
 resizeViewport();
@@ -84,7 +84,7 @@ async function connect(event) {
     document.activeElement?.blur();
     $('home').hidden = true; $('session').hidden = false;
     $('desktopName').textContent = p.name; resizeViewport();
-    Object.assign(credentials, desktopSize(measure().width, measure().height));
+    Object.assign(credentials, desktopSize());
     status('Connecting…');
     const response = await fetch('/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credentials), signal: AbortSignal.timeout(15000) });
     credentials.password = '';
@@ -105,7 +105,7 @@ async function connect(event) {
     const sendMouse = e => { if (client === current) { display.showCursor(true); if (pointer) {
       const rect = display.getElement().getBoundingClientRect();
       const state = new Guacamole.Mouse.State(e.state);
-      Object.assign(state, e.state, { x: Math.max(0, Math.min(display.getWidth() - 1, (pointer.clientX - rect.left) / display.getScale())), y: Math.max(0, Math.min(display.getHeight() - 1, (pointer.clientY - rect.top) / display.getScale())) });
+      Object.assign(state, e.state, remotePoint({ x: pointer.clientX, y: pointer.clientY }, rect, display.getScale(), display.getWidth(), display.getHeight()));
       current.sendMouseState(state); pointer = null;
     } else current.sendMouseState(e.state, true); } };
     new Guacamole.Mouse(display.getElement()).onEach(['mousedown', 'mousemove', 'mouseup'], sendMouse);

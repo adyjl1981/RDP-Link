@@ -67,20 +67,32 @@ test('absolute pointer mapping accounts for fit, zoom, translation and bounds', 
 });
 
 
-test('pinch lower bound and reset use fitted scale below one in both orientations', () => {
+test('default viewport is native scale; pan works before zoom and fit is explicit', () => {
   const z = zoomState();
-  for (const [vw, vh] of [[390, 650], [844, 310]]) {
-    z.reset();
-    const baseline = Math.min(vw / 1920, vh / 1080);
-    assert.equal(z.layout(1920, 1080, vw, vh).scale, baseline);
-    assert.deepEqual(z.pan(100, 100), { zoom: 1, x: 0, y: 0 });
-    z.pinch(2, 0, 0); z.pan(100, 100);
-    assert.equal(z.layout(1920, 1080, vw, vh).scale, baseline * 2);
-    z.pinch(0.001, 0, 0);
-    const fitted = z.layout(1920, 1080, vw, vh);
-    assert.deepEqual(fitted, { zoom: 1, x: 0, y: 0, scale: baseline });
-    assert.ok(1920 * fitted.scale <= vw && 1080 * fitted.scale <= vh);
-    z.pinch(3, 0, 0); z.reset();
-    assert.equal(z.layout(1920, 1080, vw, vh).scale, baseline);
-  }
+  assert.equal(z.layout(1920, 1080, 390, 650).scale, 1);
+  assert.deepEqual(z.pan(100, -100), { zoom: 1, x: 100, y: -100 });
+  assert.equal(z.layout(1920, 1080, 844, 310).scale, 1);
+  z.fit();
+  assert.equal(z.layout(1920, 1080, 844, 310).scale, 310 / 1080);
+  z.reset(); assert.equal(z.layout(1920, 1080, 844, 310).scale, 1);
+});
+
+test('one-finger pan at native scale never clicks; small tap jitter does', () => {
+  const h = gestures(); h.z.layout(1920, 1080, 400, 400);
+  h.fire('touchstart', [[200, 200]]); h.fire('touchmove', [[240, 220]]);
+  h.fire('touchend', [], [[240, 220]]);
+  assert.deepEqual(h.z.get(), { zoom: 1, x: 40, y: 20 });
+  assert.equal(h.taps.length, 0);
+  h.fire('touchstart', [[200, 200]]); h.fire('touchmove', [[202, 201]]);
+  h.fire('touchend', [], [[202, 201]]); assert.equal(h.taps.length, 1);
+});
+
+test('pointer mapping combines centered desktop, pan and zoom after rotation', () => {
+  const z = zoomState(); z.layout(1920, 1080, 390, 650);
+  z.pan(100, -50); z.pinch(2, 0, 0);
+  const t = z.layout(1920, 1080, 844, 310);
+  const rect = { left: (844 - 1920 * t.scale) / 2 + t.x,
+    top: (310 - 1080 * t.scale) / 2 + t.y };
+  assert.deepEqual(remotePoint({ x: rect.left + 900 * t.scale, y: rect.top + 450 * t.scale },
+    rect, t.scale, 1920, 1080), { x: 900, y: 450 });
 });

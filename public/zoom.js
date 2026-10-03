@@ -12,18 +12,19 @@ export function zoomState() {
   return {
     layout(w, h, vw, vh) {
       width = w; height = h; viewWidth = vw; viewHeight = vh;
-      baseline = fit(w, h, vw, vh);
+      baseline = 1;
       const transform = clamp();
       return { ...transform, scale: baseline * zoom };
     },
     pinch(factor, anchorX, anchorY, dx = 0, dy = 0) {
-      const next = Math.max(1, Math.min(4, zoom * factor));
+      const next = Math.max(Math.min(1, fit(width, height, viewWidth, viewHeight)), Math.min(4, zoom * factor));
       const ratio = next / zoom;
       x = anchorX - (anchorX - x) * ratio + dx;
       y = anchorY - (anchorY - y) * ratio + dy;
       zoom = next; return clamp();
     },
-    pan(dx, dy) { if (zoom > 1) { x += dx; y += dy; } return clamp(); },
+    pan(dx, dy) { x += dx; y += dy; return clamp(); },
+    fit() { zoom = fit(width, height, viewWidth, viewHeight); x = y = 0; return clamp(); },
     reset() { zoom = 1; x = y = 0; return clamp(); },
     get() { return { zoom, x, y }; }
   };
@@ -60,7 +61,7 @@ export function installGestures(element, state, render, { tap = () => {} } = {})
         const rect = element.getBoundingClientRect();
         state.pinch(distance(ps) / Math.max(1, distance(previous)), a.x - rect.left - rect.width / 2, a.y - rect.top - rect.height / 2, b.x - a.x, b.y - a.y);
         render();
-      } else if (ps.length === 1 && state.get().zoom > 1 && (moved || pinching)) {
+      } else if (ps.length === 1 && (moved || pinching)) {
         state.pan(b.x - a.x, b.y - a.y); render();
       }
     }
@@ -73,7 +74,7 @@ export function installGestures(element, state, render, { tap = () => {} } = {})
       if (start && t && !pinching && !moved && Date.now() - start.time < 300
           && Math.hypot(t.clientX - start.x, t.clientY - start.y) < 12) {
         const now = Date.now();
-        if (lastTap && now - lastTap < 300 && state.get().zoom > 1) { state.reset(); render(); lastTap = 0; }
+        if (lastTap && now - lastTap < 300) { state.reset(); render(); lastTap = 0; }
         else { tap({ x: t.clientX, y: t.clientY }); lastTap = now; }
       }
       start = null; pinching = false; moved = false;

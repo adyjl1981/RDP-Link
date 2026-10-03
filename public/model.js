@@ -7,9 +7,7 @@ export function profile(input) {
   return { name: input.name.trim() || input.host.trim(), host: input.host.trim(), port, username: input.username.trim() };
 }
 
-// CSS pixels keep controls readable on high-DPI phones. Bound resource usage.
-export function desktopSize(width, height) {
-  if (![width, height].every(value => Number.isFinite(value) && value > 0)) return { width: 1280, height: 720 };
-  const ratio = Math.min(1, 4096 / width, 4096 / height);
-  return { width: Math.max(200, Math.round(width * ratio)), height: Math.max(200, Math.round(height * ratio)) };
+// Fixed MVP desktop geometry, independent of phone orientation and keyboard.
+export function desktopSize() {
+  return { width: 1920, height: 1080 };
 }
