@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { instruction as ins, takeInstruction } from './lib/protocol.js';
+import { desktopSize } from './public/model.js';
 const origin = process.env.PUBLIC_ORIGIN || 'http://localhost:8080';
 const targets = new Set((process.env.RDP_TARGETS || 'host.docker.internal:3389').split(','));
 const tickets = new Map(); let sessions = 0;
@@ -64,11 +65,12 @@ function bridge(ws, config) {
           if (ws.bufferedAmount > 8 * 1024 * 1024) return stop('Connection too slow');
           ws.send(ins(op, ...args));
         } else if (phase === 'args' && op === 'args') {
-          const params = { hostname: config.host, port: config.port, username: config.username, password: config.password,
+          const { width, height } = desktopSize();
+          const params = { width, height, hostname: config.host, port: config.port, username: config.username, password: config.password,
             security: 'any', 'ignore-cert': process.env.RDP_IGNORE_CERT === 'true' ? 'true' : 'false',
             'resize-method': 'none', 'disable-audio': 'true', 'enable-drive': 'false' };
-          // Desktop Sharing owns its geometry. Omit the optional size hint.
-          tcp.write(ins('audio') + ins('video') + ins('image', 'image/png', 'image/jpeg') + ins('connect', ...args.map(k => k.startsWith('VERSION_') ? 'VERSION_1_5_0' : params[k] ?? '')));
+          // Negotiate a desktop-sized connection; subsequent client sizes are blocked.
+          tcp.write(ins('size', width, height, 96) + ins('audio') + ins('video') + ins('image', 'image/png', 'image/jpeg') + ins('connect', ...args.map(k => k.startsWith('VERSION_') ? 'VERSION_1_5_0' : params[k] ?? '')));
           config.password = ''; phase = 'ready';
         } else if (phase === 'ready' && op === 'ready') {
           clearTimeout(timer); phase = 'stream'; ws.send(ins('', args[0]));

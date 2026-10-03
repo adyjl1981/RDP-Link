@@ -1,3 +1,4 @@
+import { desktopSize, displaySize } from '../public/model.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { zoomState } from '../public/zoom.js';
@@ -55,5 +56,36 @@ test('server desktop changes drive local pan bounds and Fit screen after rotatio
     zoom.fit(); sizing.fit();
     assert.equal(transform.scale, Math.min(viewport.width / desktop[0], viewport.height / desktop[1]));
     assert.equal(transform.x, 0); assert.equal(transform.y, 0);
+  }
+});
+
+test('desktop negotiation size and local fallback are independent of phone geometry', () => {
+  for (const size of [[390, 650], [844, 310], [0, 0], [Infinity, NaN]]) {
+    assert.deepEqual(desktopSize(...size), { width: 1920, height: 1080 });
+  }
+  for (const [width, height] of [[0, 0], [1920, 0], [0, 1080], [Infinity, 1080], [1920, NaN]]) {
+    assert.deepEqual(displaySize({ getWidth: () => width, getHeight: () => height }),
+      { width: 1920, height: 1080 });
+  }
+});
+
+test('reported Guacamole dimensions supersede the initial fallback for local pan bounds', () => {
+  const zoom = zoomState();
+  let desktop = [0, 0];
+  const display = { getWidth: () => desktop[0], getHeight: () => desktop[1] };
+  const client = { getDisplay: () => display, sendSize() { assert.fail('remote resize'); } };
+  const sizing = viewportController({ getClient: () => client,
+    measure: () => ({ width: 390, height: 650 }),
+    render(d, _scale, w, h) {
+      const size = displaySize(d);
+      zoom.layout(size.width, size.height, w, h);
+    } });
+  sizing.resize();
+  assert.deepEqual(zoom.pan(1e6, 1e6), { zoom: 1, x: 765, y: 215 });
+  for (const dimensions of [[2560, 1440], [1366, 768]]) {
+    desktop = dimensions; sizing.fit();
+    assert.deepEqual(zoom.pan(1e6, 1e6), {
+      zoom: 1, x: (desktop[0] - 390) / 2, y: (desktop[1] - 650) / 2
+    });
   }
 });

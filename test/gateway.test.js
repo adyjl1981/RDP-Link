@@ -72,8 +72,9 @@ test('gateway session creation without an access key, origin checks, fragmented 
     await once(ws, 'open');
     while (messages.length < 2) await once(ws, 'message');
     assert.deepEqual(messages.slice(0, 2), [ins('', '$test'), ins('size', 0, 2560, 1440)]);
-    assert.deepEqual(received.find(x => x[0] === 'connect'), ['connect', 'VERSION_1_5_0', 'desktop', '3389', 'me', 'p,;🔐', 'false', 'none', '', '']);
-    assert.equal(received.some(x => x[0] === 'size'), false);
+    assert.deepEqual(received.find(x => x[0] === 'connect'), ['connect', 'VERSION_1_5_0', 'desktop', '3389', 'me', 'p,;🔐', 'false', 'none', '1920', '1080']);
+    assert.deepEqual(received.filter(x => x[0] === 'size'), [['size', '1920', '1080', '96']]);
+    assert.ok(received.findIndex(x => x[0] === 'size') < received.findIndex(x => x[0] === 'connect'));
     const ping = once(ws, 'message'); ws.send(ins('', 'ping', 123)); assert.equal((await ping)[0].toString(), ins('', 'ping', 123));
     const input = once(upstream, 'data'); ws.send(ins('mouse', 100, 200, 1)); await input;
     assert.ok(received.some(x => x.join('|') === 'mouse|100|200|1'));
@@ -82,7 +83,7 @@ test('gateway session creation without an access key, origin checks, fragmented 
     ws.send(ins('size', 390, 650) + ins('size', 844, 310) + ins('mouse', 321, 456, 0));
     await rotated;
     assert.ok(received.some(x => x.join('|') === 'mouse|321|456|0'));
-    assert.equal(received.some(x => x[0] === 'size'), false);
+    assert.deepEqual(received.filter(x => x[0] === 'size'), [['size', '1920', '1080', '96']]);
     assert.equal(ws.readyState, WebSocket.OPEN);
     const reused = new WebSocket(`ws://127.0.0.1:${port}/tunnel?ticket=${ticket}`, 'guacamole', { origin });
     await once(reused, 'error');

@@ -1,5 +1,5 @@
 import Guacamole from '/guacamole.js';
-import { profile } from './model.js';
+import { profile, displaySize } from './model.js';
 import { canConnect } from './connection-policy.js';
 import { viewportController, usableViewport } from './viewport.js';
 import { zoomState, installGestures, remotePoint } from './zoom.js';
@@ -26,7 +26,8 @@ const measure = () => ({ width: $('viewport').clientWidth, height: $('viewport')
 const zoom = zoomState();
 let remoteCursor = null;
 const sizing = viewportController({ getClient: () => client, isConnected: () => connected, measure, render(display, _scale, width, height) {
-  const transform = zoom.layout(display.getWidth(), display.getHeight(), width, height);
+  const desktop = displaySize(display);
+  const transform = zoom.layout(desktop.width, desktop.height, width, height);
   display.scale(transform.scale);
   $('display').style.transform = `translate(${transform.x}px, ${transform.y}px)`;
 } });
@@ -36,7 +37,7 @@ installGestures($('viewport'), zoom, () => sizing.fit(), {
     const display = client.getDisplay();
     sizing.fit();
     remoteCursor = zoom.followCursor(remoteCursor ?? {
-      x: display.getWidth() / 2, y: display.getHeight() / 2
+      x: displaySize(display).width / 2, y: displaySize(display).height / 2
     }, dx, dy);
     sizing.fit();
     const state = new Guacamole.Mouse.State();
@@ -50,7 +51,7 @@ installGestures($('viewport'), zoom, () => sizing.fit(), {
   tap: () => {
     if (!client || !connected) return;
     const display = client.getDisplay();
-    remoteCursor ??= { x: display.getWidth() / 2, y: display.getHeight() / 2 };
+    remoteCursor ??= { x: displaySize(display).width / 2, y: displaySize(display).height / 2 };
     const state = new Guacamole.Mouse.State();
     Object.assign(state, remoteCursor);
     display.showCursor(true);
@@ -121,7 +122,7 @@ async function connect(event) {
     const sendMouse = e => { if (client === current) { display.showCursor(true); if (pointer) {
       const rect = display.getElement().getBoundingClientRect();
       const state = new Guacamole.Mouse.State(e.state);
-      Object.assign(state, e.state, remotePoint({ x: pointer.clientX, y: pointer.clientY }, rect, display.getScale(), display.getWidth(), display.getHeight()));
+      Object.assign(state, e.state, remotePoint({ x: pointer.clientX, y: pointer.clientY }, rect, display.getScale(), displaySize(display).width, displaySize(display).height));
       remoteCursor = { x: state.x, y: state.y };
       current.sendMouseState(state); pointer = null;
     } else {
