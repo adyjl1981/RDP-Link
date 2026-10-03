@@ -2,6 +2,7 @@ import Guacamole from '/guacamole.js';
 import { desktopSize, profile } from './model.js';
 import { canConnect } from './connection-policy.js';
 import { viewportController } from './viewport.js';
+import { zoomState, installGestures } from './zoom.js';
 const $ = id => document.getElementById(id);
 const form = $('connect'); const status = message => $('status').textContent = message;
 let profiles = []; let client = null; let generation = 0; let busy = false;
@@ -22,7 +23,23 @@ $('forget').onclick = () => {
 };
 function persist() { try { localStorage.setItem('rdp-profiles', JSON.stringify(profiles)); } catch { status('Profile could not be saved on this device.'); } }
 const measure = () => ({ width: $('viewport').clientWidth, height: $('viewport').clientHeight });
-const sizing = viewportController({ getClient: () => client, measure });
+const zoom = zoomState();
+const sizing = viewportController({ getClient: () => client, measure, render(display, fit, width, height) {
+  const transform = zoom.layout(display.getWidth() * fit, display.getHeight() * fit, width, height);
+  display.scale(fit * transform.zoom);
+  $('display').style.transform = `translate(${transform.x}px, ${transform.y}px)`;
+} });
+let touchHandlers = {}, touchpad = null, prepareTouchpad = () => {};
+installGestures($('viewport'), zoom, () => sizing.fit(), {
+  touch: event => { if (!touchpad && event.type === 'touchstart') prepareTouchpad(); touchHandlers[event.type]?.(event); },
+  claim: () => { touchpad?.reset(); touchHandlers = {}; touchpad = null; }
+});
+$('fitButton').onclick = () => { zoom.reset(); sizing.fit(); };
+$('controlsButton').onclick = () => {
+  const expanded = $('sessionControls').hidden;
+  $('sessionControls').hidden = !expanded;
+  $('controlsButton').setAttribute('aria-expanded', String(expanded));
+};
 const scale = sizing.fit;
 function resizeViewport() {
   // Safari's visual viewport also tracks the software keyboard and browser bars.
@@ -35,7 +52,8 @@ window.visualViewport?.addEventListener('resize', resizeViewport);
 window.addEventListener('pageshow', resizeViewport);
 resizeViewport();
 function end(message) {
-  generation++; busy = false; sizing.reset();
+  generation++; busy = false; sizing.reset(); zoom.reset(); touchHandlers = {}; touchpad = null; prepareTouchpad = () => {};
+  $('sessionControls').hidden = true; $('controlsButton').setAttribute('aria-expanded', 'false');
   const old = client; client = null; old?.disconnect();
   $('display').replaceChildren(); $('session').hidden = true; $('home').hidden = false;
   $('keyboard').classList.remove('visible'); $('keyboard').value = ''; $('keyboard').blur();
@@ -66,9 +84,27 @@ form.onsubmit = async event => {
     $('display').replaceChildren(display.getElement()); $('desktopName').textContent = p.name;
     $('home').hidden = true; $('session').hidden = false;
     display.onresize = scale;
-    const sendMouse = e => { if (client === current) { display.showCursor(true); current.sendMouseState(e.state, true); } };
+    let pointer = null;
+    display.getElement().addEventListener('mousemove', e => { pointer = e; }, true);
+    display.getElement().addEventListener('mousedown', e => { pointer = e; }, true);
+    display.getElement().addEventListener('mouseup', e => { pointer = e; }, true);
+    const sendMouse = e => { if (client === current) { display.showCursor(true); if (pointer) {
+      const rect = display.getElement().getBoundingClientRect();
+      const state = new Guacamole.Mouse.State(e.state);
+      Object.assign(state, e.state, { x: Math.max(0, Math.min(display.getWidth() - 1, (pointer.clientX - rect.left) / display.getScale())), y: Math.max(0, Math.min(display.getHeight() - 1, (pointer.clientY - rect.top) / display.getScale())) });
+      current.sendMouseState(state); pointer = null;
+    } else current.sendMouseState(e.state, true); } };
     new Guacamole.Mouse(display.getElement()).onEach(['mousedown', 'mousemove', 'mouseup'], sendMouse);
-    new Guacamole.Mouse.Touchpad(display.getElement()).onEach(['mousedown', 'mousemove', 'mouseup'], sendMouse);
+    prepareTouchpad = () => {
+      const surface = display.getElement();
+      const proxy = { get offsetWidth() { return surface.offsetWidth; }, get offsetHeight() { return surface.offsetHeight; },
+        addEventListener(type, handler) { touchHandlers[type] = handler; } };
+      touchpad = new Guacamole.Mouse.Touchpad(proxy);
+      touchpad.onEach(['mousedown', 'mousemove', 'mouseup'], sendMouse);
+    };
+    // Reinitialize only the local gesture interpreter after a zoom gesture.
+    // The client, tunnel, display and remote session remain the same.
+    prepareTouchpad();
     current.onerror = error => { if (client === current) end(error.message || 'Connection failed. Enter credentials to reconnect.'); };
     current.onstatechange = state => {
       if (client !== current) return;

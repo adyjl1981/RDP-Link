@@ -10,3 +10,12 @@ body:has(#session:not([hidden])){overflow:hidden}
 body:has(#session:not([hidden])) #status{position:fixed;left:0;right:0;bottom:env(safe-area-inset-bottom);margin:0;font-size:11px;pointer-events:none}
 #session footer{padding-bottom:22px}
 @media (orientation:landscape) and (max-height:500px){#session header{padding:4px 8px}#session footer{font-size:10px;padding-top:3px}}
+
+/* Controls overlay the desktop so opening them never resizes the RDP session. */
+#session header{position:absolute;z-index:5;top:calc(env(safe-area-inset-top) + 54px);right:calc(env(safe-area-inset-right) + 8px);max-width:calc(100% - 16px);background:#182337ed;border-radius:12px;box-shadow:0 4px 20px #0008}
+#session header[hidden]{display:none}
+#controlsButton{position:absolute;z-index:6;top:calc(env(safe-area-inset-top) + 6px);right:calc(env(safe-area-inset-right) + 8px);width:44px;padding:0;background:#182337bd;color:white}
+#session footer{display:none}
+body:has(#session:not([hidden])) #status{width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+#viewport{touch-action:none;overscroll-behavior:none}
+#display{will-change:transform}

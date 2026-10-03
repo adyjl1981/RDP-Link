@@ -1,13 +1,15 @@
 import { desktopSize, fit } from './model.js';
 
 // Resize only the current client: never construct a tunnel or end a session here.
-export function viewportController({ getClient, measure, schedule = setTimeout, cancel = clearTimeout }) {
+export function viewportController({ getClient, measure, schedule = setTimeout, cancel = clearTimeout, render }) {
   let timer; let lastClient; let lastSize = '';
   function fitDisplay() {
     const client = getClient(); const { width, height } = measure();
     if (!client || width <= 0 || height <= 0) return;
     const display = client.getDisplay();
-    display.scale(fit(display.getWidth(), display.getHeight(), width, height));
+    const scale = fit(display.getWidth(), display.getHeight(), width, height);
+    if (render) render(display, scale, width, height);
+    else display.scale(scale);
   }
   function update() {
     timer = undefined;
