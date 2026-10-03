@@ -1,0 +1,20 @@
+services:
+  gateway:
+    build: .
+    environment:
+      BIND_HOST: 0.0.0.0
+      GUACD_HOST: guacd
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      GATEWAY_SECRET: ${GATEWAY_SECRET:?Set GATEWAY_SECRET in .env}
+      RDP_TARGETS: ${RDP_TARGETS:-host.docker.internal:3389}
+      RDP_IGNORE_CERT: ${RDP_IGNORE_CERT:-false}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - guacd
+    restart: unless-stopped
+  guacd:
+    image: guacamole/guacd:1.6.0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
