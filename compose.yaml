@@ -9,7 +9,7 @@ services:
       RDP_TARGETS: ${RDP_TARGETS:-host.docker.internal:3389}
       RDP_IGNORE_CERT: ${RDP_IGNORE_CERT:-false}
     ports:
-      - "0.0.0.0:8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       - guacd
     restart: unless-stopped
