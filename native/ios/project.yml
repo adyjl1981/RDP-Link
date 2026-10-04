@@ -1,0 +1,22 @@
+name: RDPLinkNative
+options:
+  deploymentTarget:
+    iOS: "16.0"
+packages:
+  RDPLinkCore:
+    path: .
+targets:
+  RDPLinkNative:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: RDPLinkCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rdplink.native
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Connect directly to the Ubuntu desktop you choose on your local network.
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
