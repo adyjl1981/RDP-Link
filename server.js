@@ -5,7 +5,8 @@ import { randomBytes } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { instruction as ins, takeInstruction } from './lib/protocol.js';
 import { desktopSize } from './public/model.js';
-const origin = process.env.PUBLIC_ORIGIN || 'http://localhost:8080';
+import { originPolicy } from './lib/origins.js';
+const permitsOrigin = originPolicy();
 const targets = new Set((process.env.RDP_TARGETS || 'host.docker.internal:3389').split(','));
 const tickets = new Map(); let sessions = 0;
 const files = new Map([
@@ -24,7 +25,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'");
   try {
     if (req.method === 'POST' && req.url === '/session') {
-      if (req.headers.origin !== origin) { res.writeHead(403).end(); return; }
+      if (!permitsOrigin(req.headers.origin)) { res.writeHead(403).end(); return; }
       let body = ''; for await (const chunk of req) { body += chunk; if (body.length > 8192) { res.writeHead(413).end(); return; } }
       const data = JSON.parse(body);
       if (tickets.size + sessions >= 4) { res.writeHead(429).end('Gateway is busy'); return; }
@@ -43,9 +44,12 @@ const server = http.createServer(async (req, res) => {
 });
 const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024, handleProtocols: protocols => protocols.has('guacamole') ? 'guacamole' : false });
 server.on('upgrade', (req, socket, head) => {
-  const url = new URL(req.url, origin); const ticket = url.searchParams.get('ticket');
+  if (!permitsOrigin(req.headers.origin)) { socket.destroy(); return; }
+  let url;
+  try { url = new URL(req.url, 'http://localhost'); } catch { socket.destroy(); return; }
+  const ticket = url.searchParams.get('ticket');
   const config = tickets.get(ticket); tickets.delete(ticket);
-  if (url.pathname !== '/tunnel' || req.headers.origin !== origin || !config || sessions >= 4 || !req.headers['sec-websocket-protocol']?.split(/,\s*/).includes('guacamole')) { socket.destroy(); return; }
+  if (url.pathname !== '/tunnel' || !config || sessions >= 4 || !req.headers['sec-websocket-protocol']?.split(/,\s*/).includes('guacamole')) { socket.destroy(); return; }
   wss.handleUpgrade(req, socket, head, ws => bridge(ws, config));
 });
 function bridge(ws, config) {

@@ -4,6 +4,7 @@ services:
     environment:
       BIND_HOST: 0.0.0.0
       GUACD_HOST: guacd
+      PUBLIC_ORIGINS: ${PUBLIC_ORIGINS:-}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
       RDP_TARGETS: ${RDP_TARGETS:-host.docker.internal:3389}
       RDP_IGNORE_CERT: ${RDP_IGNORE_CERT:-false}

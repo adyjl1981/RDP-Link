@@ -6,7 +6,8 @@ import { once } from 'node:events';
 import WebSocket from 'ws';
 import { instruction as ins, takeInstruction } from '../lib/protocol.js';
 
-test('gateway session creation without an access key, origin checks, fragmented handshake, input, ping, ticket reuse and cleanup', { timeout: 15000 }, async () => {
+for (const browserOrigin of [null, 'http://192.168.1.50:8080', 'https://desktop.example.ts.net']) {
+test(`origin ${browserOrigin ?? 'legacy'}: gateway session creation without an access key, origin checks, fragmented handshake, input, ping, ticket reuse and cleanup`, { timeout: 15000 }, async () => {
   let upstream; let buffered = ''; const received = [];
   const mock = net.createServer(socket => {
     upstream = socket; socket.setEncoding('utf8');
@@ -27,14 +28,18 @@ test('gateway session creation without an access key, origin checks, fragmented 
   const reservation = net.createServer(); await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
   const port = reservation.address().port; await new Promise(resolve => reservation.close(resolve));
   const origin = `http://127.0.0.1:${port}`;
-  const env = { ...process.env }; delete env.GATEWAY_SECRET;
+  const env = { ...process.env }; delete env.GATEWAY_SECRET; delete env.PUBLIC_ORIGINS;
+  if (browserOrigin) env.PUBLIC_ORIGINS = 'http://192.168.1.50:8080,https://desktop.example.ts.net';
+  const requestOrigin = browserOrigin ?? origin;
   const child = spawn(process.execPath, ['server.js'], { env: { ...env, PORT: String(port), PUBLIC_ORIGIN: origin, RDP_TARGETS: 'desktop:3389', GUACD_PORT: String(mock.address().port) }, stdio: ['ignore', 'pipe', 'pipe'] });
   let ws;
   try {
     await once(child.stdout, 'data');
     const data = { host: 'desktop', port: 3389, username: 'me', password: 'p,;🔐', width: 844, height: 310 };
-    const post = (body, requestOrigin = origin) => fetch(origin + '/session', { method: 'POST', headers: { Origin: requestOrigin, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    assert.equal((await post(data, 'https://evil.example')).status, 403);
+    const post = (body, requestOrigin = browserOrigin ?? origin) => fetch(origin + '/session', { method: 'POST', headers: { Origin: requestOrigin, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const rejectedOrigins = ['https://evil.example', 'null', 'https://desktop.example.ts.net.evil.example', 'https://desktop.example.ts.net/', 'http://192.168.1.50:8080/path', 'not-an-origin', 'https://desktop.example.ts.net,http://192.168.1.50:8080'];
+    for (const rejected of rejectedOrigins) assert.equal((await post(data, rejected)).status, 403);
+    assert.equal((await fetch(origin + '/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })).status, 403);
     for (const field of ['username', 'password']) {
       for (const value of ['', null, 123]) assert.equal((await post({ ...data, [field]: value })).status, 400);
       const missing = { ...data }; delete missing[field];
@@ -67,7 +72,13 @@ test('gateway session creation without an access key, origin checks, fragmented 
     assert.match(html, /name="password"[^>]*required/);
     const response = await post(data); assert.equal(response.status, 201);
     const { ticket } = await response.json();
-    ws = new WebSocket(`ws://127.0.0.1:${port}/tunnel?ticket=${ticket}`, 'guacamole', { origin });
+    // Invalid upgrades cannot consume a valid single-use ticket.
+    for (const rejected of [...rejectedOrigins, undefined]) {
+      const denied = new WebSocket(`ws://127.0.0.1:${port}/tunnel?ticket=${ticket}`, 'guacamole', rejected === undefined ? {} : { origin: rejected });
+      let opened = false; denied.on('open', () => { opened = true; });
+      await once(denied, 'error'); assert.equal(opened, false);
+    }
+    ws = new WebSocket(`ws://127.0.0.1:${port}/tunnel?ticket=${ticket}`, 'guacamole', { origin: requestOrigin });
     const messages = []; ws.on('message', msg => messages.push(msg.toString()));
     await once(ws, 'open');
     while (messages.length < 2) await once(ws, 'message');
@@ -85,7 +96,7 @@ test('gateway session creation without an access key, origin checks, fragmented 
     assert.ok(received.some(x => x.join('|') === 'mouse|321|456|0'));
     assert.deepEqual(received.filter(x => x[0] === 'size'), [['size', '1920', '1080', '96']]);
     assert.equal(ws.readyState, WebSocket.OPEN);
-    const reused = new WebSocket(`ws://127.0.0.1:${port}/tunnel?ticket=${ticket}`, 'guacamole', { origin });
+    const reused = new WebSocket(`ws://127.0.0.1:${port}/tunnel?ticket=${ticket}`, 'guacamole', { origin: requestOrigin });
     await once(reused, 'error');
     const closed = once(ws, 'close'); upstream.destroy(); await closed;
   } finally {
@@ -93,3 +104,5 @@ test('gateway session creation without an access key, origin checks, fragmented 
     await new Promise(resolve => mock.close(resolve));
   }
 });
+
+}

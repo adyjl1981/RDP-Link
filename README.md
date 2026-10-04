@@ -10,7 +10,7 @@ Requires Docker with Compose. In this repository:
 
 ```sh
 cp .env.example .env
-# Set PUBLIC_ORIGIN to your HTTPS URL and RDP_TARGETS to your desktop's host:port.
+# Set PUBLIC_ORIGINS to your exact browser URLs and RDP_TARGETS to your desktop's host:port.
 docker compose up --build -d
 ```
 
@@ -22,9 +22,29 @@ rdp.example.com {
 }
 ```
 
-Set `PUBLIC_ORIGIN=https://rdp.example.com` exactly, without a trailing slash. Use a private network/VPN for access where possible. Compose publishes the gateway on the LAN on port 8080; `guacd` has no published port. Do not expose guacd directly. HTTPS protects the iPhone-to-gateway connection; RDP handles gateway-to-desktop transport separately. Desktop destinations must exactly match the `RDP_TARGETS` allowlist.
+Set `PUBLIC_ORIGINS=https://rdp.example.com` exactly, without a trailing slash. Use a private network/VPN for access where possible. Compose publishes the gateway on the LAN on port 8080; `guacd` has no published port. Do not expose guacd directly. HTTPS protects the iPhone-to-gateway connection; RDP handles gateway-to-desktop transport separately. Desktop destinations must exactly match the `RDP_TARGETS` allowlist.
 
-For local development, `npm ci`, then supply `RDP_TARGETS` and run `npm start` with an existing guacd on localhost:4822. Plain HTTP is allowed on `localhost`, `127.0.0.1`, and RFC1918 private LAN addresses (`10.x.x.x`, `172.16–31.x.x`, and `192.168.x.x`), including from an iPhone. Set `PUBLIC_ORIGIN` to the exact LAN URL, such as `http://192.168.1.50:8080`. Normal/public addresses require HTTPS.
+For local development, `npm ci`, then supply `RDP_TARGETS` and run `npm start` with an existing guacd on localhost:4822. Plain HTTP is allowed on `localhost`, `127.0.0.1`, and RFC1918 private LAN addresses (`10.x.x.x`, `172.16–31.x.x`, and `192.168.x.x`), including from an iPhone. Include the exact LAN URL in `PUBLIC_ORIGINS`, such as `http://192.168.1.50:8080`. Normal/public addresses require HTTPS.
+
+## Trusted browser origins and Tailscale Serve
+
+The supplied configuration explicitly trusts both browser URLs:
+
+```dotenv
+PUBLIC_ORIGINS=http://192.168.1.50:8080,https://desktop.example.ts.net
+```
+
+`PUBLIC_ORIGINS` is a comma-separated list of exact HTTP(S) origins. Whitespace around configuration entries is ignored. Nonempty `PUBLIC_ORIGINS` takes precedence over the legacy `PUBLIC_ORIGIN`; when unset or empty, the legacy setting still works, defaulting to `http://localhost:8080`. Invalid entries fail startup. Do not include paths, trailing slashes, credentials or wildcards. Both POST `/session` and WebSocket `/tunnel` reject missing, malformed and unknown Origin headers. This is an origin allowlist, not a change to the RDP destination allowlist or credentials.
+
+For these URLs, `.env.example` includes the list and Compose forwards it to the gateway. Existing `.env` files need the same entry. Restart/recreate the gateway after configuration changes.
+
+To serve the gateway privately over Tailscale HTTPS, follow the [Tailscale Serve CLI documentation](https://tailscale.com/docs/reference/tailscale-cli/serve) and on this Ubuntu machine run:
+
+```sh
+tailscale serve --bg http://127.0.0.1:8080
+```
+
+Open `https://desktop.example.ts.net` on a device in the tailnet. Tailscale Serve terminates HTTPS and proxies HTTP and WebSocket upgrades to the local gateway. The browser selects WSS automatically for an HTTPS page; the backend remains HTTP/WS. Preserve the browser's Origin header through any proxy. The gateway does not trust forwarded headers to expand its origin list. Verify the actual Serve URL matches the configured origin; a different machine name or port requires an explicit entry. LAN HTTP access remains available at the other listed URL. This configuration does not enable public Tailscale Funnel access.
 
 ## Ubuntu desktop setup
 
