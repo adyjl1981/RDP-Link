@@ -19,3 +19,11 @@ body:has(#session:not([hidden])) #status{position:fixed;left:0;right:0;bottom:en
 body:has(#session:not([hidden])) #status{width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 #viewport{touch-action:none;overscroll-behavior:none}
 #display{will-change:transform}
+
+#sessionStatus{width:100%;font-size:12px;color:#aebbd1}
+#connect{padding-bottom:12px}
+input:focus,select:focus,button:focus-visible{outline:2px solid #80bfff;outline-offset:2px}
+@media(max-width:400px){main{padding:20px 16px}.row{gap:10px}}
+@media(orientation:landscape) and (max-height:500px){main{max-width:640px;padding-top:12px}h1{font-size:28px}}
+
+#sessionNotice{position:absolute;z-index:4;top:calc(env(safe-area-inset-top) + 12px);left:12px;max-width:calc(100% - 80px);margin:0;padding:10px 14px;background:#182337ed;border-radius:10px;font-size:14px}

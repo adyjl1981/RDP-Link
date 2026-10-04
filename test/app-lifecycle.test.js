@@ -2,13 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-import { profile, displaySize } from '../public/model.js';
+import { profile, displaySize, profileStore } from '../public/model.js';
 import { canConnect } from '../public/connection-policy.js';
 import { viewportController, usableViewport } from '../public/viewport.js';
 import { zoomState, installGestures, remotePoint } from '../public/zoom.js';
 
 test('rotation while connecting and connected preserves the ticket, client and tunnel; explicit disconnect still works', async () => {
-  const nodes = new Map(); const listeners = new Map(); const timers = new Map(); let timerID = 0;
+  const nodes = new Map(); const listeners = new Map(); const timers = new Map(); let timerID = 0; let frames = 0;
   const node = id => {
     if (!nodes.has(id)) nodes.set(id, { value: '', hidden: false, clientWidth: 844, clientHeight: 310,
       reportValidity: () => true, style: {}, setAttribute() {}, handlers: new Map(), addEventListener(type, fn) { this.handlers.set(type, fn); }, replaceChildren() {}, add() {}, focus() {}, blur() {},
@@ -17,8 +17,9 @@ test('rotation while connecting and connected preserves the ticket, client and t
     return nodes.get(id);
   };
   node('session').hidden = true;
-  node('connect').elements = { password: { value: 'secret' } };
+  node('connect').elements = Object.fromEntries(['name', 'host', 'port', 'username', 'password'].map(key => [key, { value: key === 'password' ? 'secret' : '' }]));
   const values = { name: 'Desktop', host: 'desktop', port: '3389', username: 'me' };
+  let stored = '';
   let currentScale = 1; let resolveFetch; let posted; let fetchCount = 0; let tunnels = 0; const clients = [];
   class Client {
     constructor() { clients.push(this); this.state = 1; this.requests = []; this.mouse = []; this.disconnects = 0; }
@@ -30,16 +31,17 @@ test('rotation while connecting and connected preserves the ticket, client and t
   }
   class Mouse { onEach() {} }
   Mouse.State = class {};
-  const context = vm.createContext({ profile, displaySize, canConnect, viewportController, usableViewport, zoomState, installGestures, remotePoint,
+  const context = vm.createContext({ profile, displaySize, profileStore, canConnect, viewportController, usableViewport, zoomState, installGestures, remotePoint,
     Guacamole: { Client, Mouse, WebSocketTunnel: class { constructor() { tunnels++; } } },
     document: { getElementById: node, activeElement: { blur() {} }, documentElement: { style: { setProperty() {} } } },
     window: { innerHeight: 390, visualViewport: { height: 390, addEventListener: (name, fn) => listeners.set('visual:' + name, fn) }, addEventListener: (name, fn) => listeners.set(name, fn) },
     location: { protocol: 'http:', hostname: '192.168.1.50', host: '192.168.1.50:8080' },
-    localStorage: { getItem: () => null, setItem() {} }, Option: class {},
+    localStorage: { getItem: () => null, setItem(_key, value) { stored = value; } }, Option: class {},
     FormData: class { [Symbol.iterator]() { return Object.entries(values)[Symbol.iterator](); } },
     ResizeObserver: class { constructor(fn) { listeners.set('observer', fn); } observe() {} },
     AbortSignal, navigator: {},
     setTimeout: fn => { timers.set(++timerID, fn); return timerID; }, clearTimeout: id => timers.delete(id),
+    requestAnimationFrame: fn => { frames++; timers.set(++timerID, fn); return timerID; }, cancelAnimationFrame: id => timers.delete(id),
     fetch: (_url, options) => { fetchCount++; posted = JSON.parse(options.body); return new Promise(resolve => resolveFetch = resolve); }
   });
   // Inject deterministic scheduling into the production viewport controller.
@@ -119,7 +121,11 @@ test('rotation while connecting and connected preserves the ticket, client and t
   before = mouse.length;
   fire('touchstart', [[100, 100]]);
   fire('touchstart', [[100, 100], [200, 100]]);
+  const previousFrames = frames;
+  fire('touchmove', [[60, 100], [240, 100]]);
   fire('touchmove', [[50, 100], [250, 100]]);
+  assert.equal(frames, previousFrames + 1, 'pinch renders coalesce within one animation frame');
+  assert.equal(currentScale, 1); flush();
   fire('touchend', [[50, 100]], [[250, 100]]);
   fire('touchmove', [[60, 100]]); fire('touchend', [], [[60, 100]]);
   assert.equal(mouse.length, before);
@@ -127,10 +133,44 @@ test('rotation while connecting and connected preserves the ticket, client and t
   fire('touchstart', [[5, 5]]); fire('touchend', [], [[5, 5]]);
   assertClick(before, 1493, 542);
   assert.equal(currentScale, 2);
+  before = mouse.length;
+  fire('touchstart', [[100, 100]]); flush(); fire('touchend', [], [[100, 100]]);
+  assert.deepEqual(mouse.slice(before).map(s => [s.x, s.y, s.right]), [[1493, 542, true], [1493, 542, false]]);
+  before = mouse.length;
+  fire('touchstart', [[100, 100], [200, 100]]);
+  fire('touchmove', [[100, 124], [200, 124]]); fire('touchmove', [[100, 148], [200, 148]]);
+  fire('touchend', [[100, 148]], [[200, 148]]); fire('touchend', [], [[100, 148]]);
+  assert.deepEqual(mouse.slice(before).map(s => [s.x, s.y, s.down]), [[1493, 542, true], [1493, 542, false], [1493, 542, true], [1493, 542, false]]);
+  assert.equal(currentScale, 2);
+  before = mouse.length;
+  fire('touchstart', [[100, 100], [200, 100]]); fire('touchmove', [[100, 76], [200, 76]]); fire('touchend', [], [[100, 76]]);
+  assert.deepEqual(mouse.slice(before).map(s => s.up), [true, false]);
+  assert.equal(node('sessionNotice').hidden, true);
   node('controlsButton').onclick(); node('fitButton').onclick(); flush();
   assert.equal(clients.length, 1); assert.equal(tunnels, 1); assert.equal(clients[0].disconnects, 0);
   assert.deepEqual(clients[0].requests, []);
   node('disconnect').onclick(); flush();
   assert.equal(clients[0].disconnects, 1); assert.equal(node('session').hidden, true);
   assert.equal(node('home').hidden, false); assert.equal(node('connectButton').disabled, false);
+  assert.equal(JSON.parse(stored)[0].zoom, 310 / 1080);
+  node('profiles').value = '0'; node('profiles').onchange();
+  assert.equal(node('connect').elements.host.value, 'desktop');
+  assert.equal(node('connect').elements.port.value, 3389);
+  assert.equal(node('connect').elements.password.value, '');
+  values.name = 'Edited'; values.host = 'new-desktop'; node('saveProfile').onclick();
+  assert.equal(JSON.parse(stored).length, 1); assert.equal(JSON.parse(stored)[0].name, 'Edited');
+  node('profiles').value = ''; node('profiles').onchange();
+  assert.equal(node('connect').elements.host.value, '');
+  values.name = 'Second'; values.host = 'home'; node('saveProfile').onclick();
+  assert.equal(JSON.parse(stored).length, 2);
+  node('forget').onclick(); assert.equal(JSON.parse(stored).length, 1);
+  assert.doesNotMatch(stored, /secret|password/);
+
+  node('profiles').value = '0'; node('profiles').onchange();
+  const reconnect = node('connectButton').onclick(new Event('click', { cancelable: true }));
+  resolveFetch({ ok: true, json: async () => ({ ticket: 'second-ticket' }) }); await reconnect; flush();
+  assert.equal(clients.length, 2); assert.equal(tunnels, 2);
+  assert.equal(currentScale, 310 / 1080); assert.deepEqual(clients[1].requests, []);
+  node('disconnect').onclick();
+
 });

@@ -34,11 +34,11 @@ When the desktop is the Docker host, use `host.docker.internal` as the profile a
 
 Certificate validation is enabled by default. For a known desktop with a self-signed RDP certificate, `RDP_IGNORE_CERT=true` is an explicit opt-in that disables RDP certificate verification. Prefer installing a certificate trusted by the guacd container. This setting does not change HTTPS validation in Safari.
 
-## Using the MVP
+## Using RDP-Link
 
-- Save named profiles containing address, port and username only. Enter the RDP password for every connection; it is never written to local storage or URLs.
+- Add, edit and delete named profiles with **Save profile** and **Delete selected profile**. Select a saved desktop to fill its address, port and username in one action. Each profile remembers its last session zoom. Enter the RDP password for every connection; it is never written to local storage or URLs. Saving a profile does not require connecting.
 - Connections negotiate an initial 1920×1080 desktop at 96 DPI with GNOME Desktop Sharing, which exposes the already-running Ubuntu session. This size is only for the initial handshake; no remote resize requests are sent afterward. Local pan bounds and transforms use Guacamole’s reported display dimensions when available, with 1920×1080 as the initial fallback. The phone starts at 100% scale as a viewport over that desktop: one-finger movement controls the pointer, exact-edge cursor following pans, taps click at the cursor, and pinch zoom and optional Fit screen transform only the local display. Rotation and keyboard changes affect only the local viewport, preserving the client and WebSocket. Pointer coordinates account for pan, zoom, and the server’s desktop dimensions.
-- Touch acts as a trackpad: move the pointer, tap to click, two-finger tap for right click, two-finger movement for scrolling, hold and move to drag. A physical mouse also works.
+- Touch acts as a trackpad: move the pointer, tap to click, hold for half a second to right-click, two-finger vertical movement for mouse-wheel scrolling, and pinch to zoom around the gesture center. Scrolling and pinch lock to one mode until both fingers lift; neither can click. A physical mouse also works.
 - Tap Keyboard for the iPhone software keyboard. Text and basic special keys are forwarded. Hardware modifier shortcuts and complex input methods need further device testing.
 - Clipboard exchanges text explicitly. Received desktop text appears in the Clipboard panel; send its contents to Ubuntu or tap Copy to iPhone. Clipboard availability depends on the Ubuntu RDP server and Safari permissions.
 - Disconnect, network loss, or leaving the page closes the session. Reconnect by entering credentials and pressing Connect again. No password retention or automatic retries.
@@ -52,9 +52,9 @@ npm test
 npm audit
 ```
 
-Tests cover profile sanitization, aspect ratio, Unicode protocol framing, origin and RDP credential checks, destination restrictions, single-use tickets, fragmented guacd handshakes, input, keepalive and disconnect cleanup. They use a simulated guacd, not a live Ubuntu desktop.
+Tests cover profile CRUD, migration, storage failures, password exclusion, long-press cancellation, scroll/pinch arbitration, anchored zoom-out, exact-edge cursor following, profile and mouse UI integration, rotation/session preservation, profile sanitization, aspect ratio, Unicode protocol framing, origin and RDP credential checks, destination restrictions, single-use tickets, fragmented guacd handshakes, input, keepalive and disconnect cleanup. They use a simulated guacd, not a live Ubuntu desktop.
 
-Before calling this device-ready, test on a real iPhone against your Ubuntu Wayland desktop: certificate/authentication, portrait/landscape, keyboard show/hide, text/backspace/Enter, drag/right-click/scroll, clipboard both ways, network interruption and reconnect. Remote Login and Desktop Sharing should be checked separately if both are needed. Linux development cannot validate iPhone Safari behavior without a device, and no live RDP credentials are supplied with the repository.
+Before calling this device-ready, test on a real iPhone against your Ubuntu Wayland desktop: certificate/authentication, portrait/landscape, keyboard show/hide, text/backspace/Enter, long-press/right-click/scroll, clipboard both ways, network interruption and reconnect. Remote Login and Desktop Sharing should be checked separately if both are needed. Linux development cannot validate iPhone Safari behavior without a device, and no live RDP credentials are supplied with the repository.
 
 ## Architecture references
 
@@ -64,3 +64,7 @@ Before calling this device-ready, test on a real iPhone against your Ubuntu Wayl
 - [Ubuntu Remote Desktop setup](https://documentation.ubuntu.com/desktop/en/24.04/how-to/share-your-desktop-remotely/)
 
 The npm `guacamole-common-js` package is a third-party distribution of the Apache client library; its Apache license is included in the dependency. Dependency versions are locked. guacd runs from the Apache 1.6.0 image.
+
+## Phase 1 iPhone regression check
+
+Before deploying beyond the existing phone test, verify tap and long press at the tracked cursor, slow pinch-out and reversal near every desktop edge, vertical two-finger scrolling without clicks, and rotation in both orientations while connected. Test selecting, editing and deleting multiple profiles, reconnecting with the remembered zoom, keyboard and clipboard, and errors/offline/disconnect. Fit screen remains an explicit session action. All zoom is local; the gateway and GNOME Desktop Sharing negotiation are unchanged.

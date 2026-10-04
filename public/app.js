@@ -1,27 +1,40 @@
 import Guacamole from '/guacamole.js';
-import { profile, displaySize } from './model.js';
+import { profile, displaySize, profileStore } from './model.js';
 import { canConnect } from './connection-policy.js';
 import { viewportController, usableViewport } from './viewport.js';
 import { zoomState, installGestures, remotePoint } from './zoom.js';
 const $ = id => document.getElementById(id);
-const form = $('connect'); const status = message => $('status').textContent = message;
-let profiles = []; let connected = false; let client = null; let generation = 0; let busy = false;
-try { profiles = JSON.parse(localStorage.getItem('rdp-profiles') || '[]').map(profile); } catch { profiles = []; }
+const form = $('connect'); const status = message => { $('status').textContent = message; $('sessionStatus').textContent = message; $('sessionNotice').textContent = message; $('sessionNotice').hidden = connected; };
+let connected = false; let client = null; let generation = 0; let busy = false;
+const store = profileStore({ getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value) });
+let selected = -1, activeProfile = -1;
 function list() {
   $('profiles').replaceChildren(new Option('New connection', ''));
-  profiles.forEach((p, i) => $('profiles').add(new Option(p.name, String(i))));
+  store.list().forEach((p, i) => $('profiles').add(new Option(p.name, String(i))));
+  $('profiles').value = selected < 0 ? '' : String(selected);
+  $('forget').disabled = selected < 0;
 }
 list();
 $('profiles').onchange = () => {
-  const p = profiles[$('profiles').value];
-  if (p) Object.entries(p).forEach(([key, value]) => form.elements[key].value = value);
-  form.elements.password.value = '';
+  selected = $('profiles').value === '' ? -1 : Number($('profiles').value);
+  const p = store.list()[selected] ?? { name: '', host: '', port: 3389, username: '' };
+  for (const key of ['name', 'host', 'port', 'username']) form.elements[key].value = p[key];
+  form.elements.password.value = ''; list();
+  status(selected < 0 ? 'New connection' : `${p.name} selected. Enter your password to connect.`);
 };
+function saveProfile() {
+  try {
+    const input = Object.fromEntries(new FormData(form));
+    selected = store.save({ ...input, zoom: store.list()[selected]?.zoom }, selected);
+    list(); status('Profile saved on this device.');
+  } catch (error) { status(error.message || 'Profile could not be saved on this device.'); }
+}
+$('saveProfile').onclick = saveProfile;
 $('forget').onclick = () => {
-  if ($('profiles').value === '') return;
-  profiles.splice(Number($('profiles').value), 1); persist(); list();
+  if (selected < 0) return;
+  try { store.remove(selected); selected = -1; $('profiles').value = ''; $('profiles').onchange(); status('Profile deleted.'); }
+  catch { status('Profile could not be deleted on this device.'); }
 };
-function persist() { try { localStorage.setItem('rdp-profiles', JSON.stringify(profiles)); } catch { status('Profile could not be saved on this device.'); } }
 const measure = () => ({ width: $('viewport').clientWidth, height: $('viewport').clientHeight });
 const zoom = zoomState();
 let remoteCursor = null;
@@ -31,7 +44,13 @@ const sizing = viewportController({ getClient: () => client, isConnected: () => 
   display.scale(transform.scale);
   $('display').style.transform = `translate(${transform.x}px, ${transform.y}px)`;
 } });
-installGestures($('viewport'), zoom, () => sizing.fit(), {
+let zoomFrame = null;
+const renderZoom = () => {
+  if (typeof requestAnimationFrame !== 'function') return sizing.fit();
+  if (zoomFrame === null) zoomFrame = requestAnimationFrame(() => { zoomFrame = null; sizing.fit(); });
+};
+const gestures = installGestures($('viewport'), zoom, renderZoom, {
+  schedule: setTimeout, cancel: clearTimeout,
   move: (dx, dy) => {
     if (!client || !connected) return;
     const display = client.getDisplay();
@@ -48,17 +67,35 @@ installGestures($('viewport'), zoom, () => sizing.fit(), {
     // so zoom does not pull the visible cursor away from the viewport edge.
     display.moveCursor(remoteCursor.x, remoteCursor.y);
   },
-  tap: () => {
-    if (!client || !connected) return;
-    const display = client.getDisplay();
-    remoteCursor ??= { x: displaySize(display).width / 2, y: displaySize(display).height / 2 };
-    const state = new Guacamole.Mouse.State();
-    Object.assign(state, remoteCursor);
-    display.showCursor(true);
-    state.left = true; client.sendMouseState(state);
-    state.left = false; client.sendMouseState(state);
-  }
+  rightClick: () => click('right'),
+  scrollStart: () => { wheelY = 0; },
+  scroll: (dx, dy) => wheel(dx, dy),
+  tap: () => click('left')
 });
+function click(button) {
+  if (!client || !connected) return;
+  const display = client.getDisplay();
+  remoteCursor ??= { x: displaySize(display).width / 2, y: displaySize(display).height / 2 };
+  const state = new Guacamole.Mouse.State();
+  Object.assign(state, remoteCursor);
+  display.showCursor(true);
+  state[button] = true; client.sendMouseState(state);
+  state[button] = false; client.sendMouseState(state);
+}
+let wheelY = 0;
+function wheel(_dx, dy) {
+  if (!client || !connected) return;
+  wheelY += dy;
+  const display = client.getDisplay();
+  remoteCursor ??= { x: displaySize(display).width / 2, y: displaySize(display).height / 2 };
+  while (Math.abs(wheelY) >= 24) {
+    const state = new Guacamole.Mouse.State(); Object.assign(state, remoteCursor);
+    const button = wheelY < 0 ? 'up' : 'down';
+    state[button] = true; client.sendMouseState(state);
+    state[button] = false; client.sendMouseState(state);
+    wheelY -= Math.sign(wheelY) * 24;
+  }
+}
 $('fitButton').onclick = () => { zoom.fit(); sizing.fit(); };
 $('controlsButton').onclick = () => {
   const expanded = $('sessionControls').hidden;
@@ -83,6 +120,13 @@ window.addEventListener('orientationchange', orientationResize);
 window.screen?.orientation?.addEventListener('change', orientationResize);
 resizeViewport();
 function end(message) {
+  if (zoomFrame !== null) { cancelAnimationFrame(zoomFrame); zoomFrame = null; }
+  gestures.reset(); wheelY = 0;
+  if (activeProfile >= 0) {
+    const p = store.list()[activeProfile];
+    if (p) try { store.save({ ...p, zoom: zoom.get().zoom }, activeProfile); } catch { /* Session cleanup must always finish. */ }
+  }
+  activeProfile = -1;
   generation++; busy = false; connected = false; sizing.reset(); zoom.reset(); remoteCursor = null;
   $('sessionControls').hidden = true; $('controlsButton').setAttribute('aria-expanded', 'false');
   const old = client; client = null; old?.disconnect();
@@ -107,9 +151,16 @@ async function connect(event) {
     credentials.password = '';
     if (!response.ok) throw Error(await response.text());
     const { ticket } = await response.json(); if (id !== generation) return;
-    const index = profiles.findIndex(x => x.host === p.host && x.port === p.port && x.username === p.username);
-    if (index < 0) profiles.push(p); else profiles[index] = p;
-    persist(); list();
+    const saved = store.list();
+    const index = selected >= 0 ? selected : saved.findIndex(x => x.host === p.host && x.port === p.port && x.username === p.username);
+    try { selected = store.save({ ...p, zoom: saved[index]?.zoom }, index); activeProfile = selected; list(); }
+    catch { status('Connecting… Profile could not be saved on this device.'); }
+    zoom.reset();
+    const preference = store.list()[activeProfile]?.zoom;
+    if (preference) {
+      const desktop = displaySize({ getWidth: () => 0, getHeight: () => 0 }); const view = measure();
+      zoom.layout(desktop.width, desktop.height, view.width, view.height); zoom.pinch(preference, 0, 0);
+    }
     const tunnel = new Guacamole.WebSocketTunnel(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/tunnel`);
     const current = client = new Guacamole.Client(tunnel); const display = current.getDisplay();
     $('display').replaceChildren(display.getElement()); $('desktopName').textContent = p.name;

@@ -18,3 +18,31 @@ export function displaySize(display) {
   return Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0
     ? { width, height } : desktopSize();
 }
+
+// Whitelist every persisted field, including when migrating older device data.
+export function savedProfile(input) {
+  const p = profile(input);
+  if (Number.isFinite(input.zoom) && input.zoom > 0 && input.zoom <= 4) p.zoom = input.zoom;
+  return p;
+}
+export function profileStore(storage) {
+  let entries = [];
+  try {
+    const data = JSON.parse(storage.getItem('rdp-profiles') || '[]');
+    if (Array.isArray(data)) for (const item of data) {
+      try { entries.push(savedProfile(item)); } catch { /* Keep other valid profiles. */ }
+    }
+    storage.setItem('rdp-profiles', JSON.stringify(entries));
+  } catch { /* A device can disable storage. Saving will report the error. */ }
+  const persist = next => { storage.setItem('rdp-profiles', JSON.stringify(next)); entries = next; };
+  return {
+    list: () => entries.map(p => ({ ...p })),
+    save(input, index = -1) {
+      const p = savedProfile(input), next = entries.slice();
+      if (index >= 0 && index < next.length) next[index] = p;
+      else { index = next.length; next.push(p); }
+      persist(next); return index;
+    },
+    remove(index) { if (index < 0 || index >= entries.length) return; persist(entries.filter((_, i) => i !== index)); }
+  };
+}
