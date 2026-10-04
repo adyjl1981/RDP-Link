@@ -1,8 +1,8 @@
 import { desktopSize, displaySize } from '../public/model.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { zoomState } from '../public/zoom.js';
-import { viewportController, usableViewport } from '../public/viewport.js';
+import { zoomState, remotePoint } from '../public/zoom.js';
+import { viewportController, usableViewport, sessionViewport, keyboardViewport } from '../public/viewport.js';
 
 function harness() {
   let size = { width: 844, height: 310 }; let state = 1; let pending; let scales = []; let requests = [];
@@ -88,4 +88,58 @@ test('reported Guacamole dimensions supersede the initial fallback for local pan
       zoom: 1, x: (desktop[0] - 390) / 2, y: (desktop[1] - 650) / 2
     });
   }
+});
+
+
+test('Safari visual offsets follow keyboard scrolling and stale rotation offsets are ignored', () => {
+  assert.deepEqual(sessionViewport({ innerWidth: 390, innerHeight: 650,
+    visualViewport: { width: 390, height: 260, offsetTop: 120, offsetLeft: 3 } }),
+    { width: 390, height: 260, top: 120, left: 3, occlusion: 390 });
+  assert.deepEqual(sessionViewport({ innerWidth: 844, innerHeight: 390,
+    visualViewport: { width: 390, height: 650, offsetTop: 120 } }),
+    { width: 844, height: 390, top: 0, left: 0, occlusion: 0 });
+  assert.deepEqual(sessionViewport({ innerWidth: 390, innerHeight: 650 }),
+    { width: 390, height: 650, top: 0, left: 0, occlusion: 0 });
+});
+
+for (const [name, normal, reduced] of [
+  ['portrait', [390, 650], [390, 220]], ['landscape', [844, 390], [844, 120]]
+]) test(`keyboard ${name}: reveal clicked region at zoom, preserve manual pan and restore after dismissal`, () => {
+  const zoom = zoomState(), keyboard = keyboardViewport(zoom);
+  const layout = (view, occlusion) => {
+    zoom.layout(1920, 1080, ...view); keyboard.layout(1920, 1080, ...view, occlusion);
+  };
+  layout(normal, 0); zoom.pinch(2, 0, 0); zoom.pan(-300, -180);
+  const saved = zoom.get(), anchor = { x: 1150, y: 700 };
+  keyboard.begin(anchor); anchor.y = 0; // Snapshot the remote target, never infer a caret.
+  layout(reduced, 300);
+  const state = zoom.get();
+  const screenY = (reduced[1] - 1080 * state.zoom) / 2 + state.y + 700 * state.zoom;
+  assert.ok(screenY >= 0 && screenY <= reduced[1] - Math.min(48, reduced[1] / 4));
+  zoom.pan(20, 20); const manual = zoom.get(); layout(reduced, 300);
+  assert.deepEqual(zoom.get(), manual, 'ordinary renders must not undo manual panning');
+  const rect = { left: (reduced[0] - 1920 * manual.zoom) / 2 + manual.x,
+    top: (reduced[1] - 1080 * manual.zoom) / 2 + manual.y };
+  const mapped = remotePoint({ x: rect.left + 1150 * manual.zoom, y: rect.top + 700 * manual.zoom }, rect, manual.zoom, 1920, 1080);
+  assert.deepEqual(mapped, { x: 1150, y: 700 });
+  keyboard.dismiss(); layout(reduced, 300);
+  assert.deepEqual(zoom.get(), manual, 'wait for the keyboard closing animation');
+  layout(normal, 0); assert.deepEqual(zoom.get(), saved);
+});
+
+test('rotation while typing reanchors once; missing tracking permits local pan and reset discards restoration', () => {
+  const zoom = zoomState(), keyboard = keyboardViewport(zoom);
+  zoom.layout(1920, 1080, 390, 650); zoom.pinch(1.5, 0, 0);
+  keyboard.begin({ x: 1300, y: 800 });
+  for (const [w, h] of [[390, 220], [844, 120], [390, 220]]) {
+    zoom.layout(1920, 1080, w, h); keyboard.layout(1920, 1080, w, h, 300);
+    const s = zoom.get();
+    const y = (h - 1080 * s.zoom) / 2 + s.y + 800 * s.zoom;
+    assert.ok(y >= 0 && y <= h);
+  }
+  keyboard.reset(); keyboard.begin(null);
+  zoom.pan(0, 30); const manual = zoom.get();
+  keyboard.layout(1920, 1080, 390, 220, 300); assert.deepEqual(zoom.get(), manual);
+  keyboard.reset(); keyboard.dismiss(); zoom.reset();
+  keyboard.layout(1920, 1080, 390, 650, 0); assert.equal(zoom.get().zoom, 1);
 });

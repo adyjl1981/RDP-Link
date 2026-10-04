@@ -1,7 +1,7 @@
 import Guacamole from '/guacamole.js';
 import { profile, displaySize, profileStore } from './model.js';
 import { canConnect } from './connection-policy.js';
-import { viewportController, usableViewport } from './viewport.js';
+import { viewportController, sessionViewport, keyboardViewport } from './viewport.js';
 import { zoomState, installGestures, remotePoint } from './zoom.js';
 const $ = id => document.getElementById(id);
 const form = $('connect'); const status = message => { $('status').textContent = message; $('sessionStatus').textContent = message; $('sessionNotice').textContent = message; $('sessionNotice').hidden = connected; };
@@ -37,10 +37,13 @@ $('forget').onclick = () => {
 };
 const measure = () => ({ width: $('viewport').clientWidth, height: $('viewport').clientHeight });
 const zoom = zoomState();
-let remoteCursor = null;
+let remoteCursor = null, inputAnchor = null;
+const keyboardView = keyboardViewport(zoom);
 const sizing = viewportController({ getClient: () => client, isConnected: () => connected, measure, render(display, _scale, width, height) {
   const desktop = displaySize(display);
-  const transform = zoom.layout(desktop.width, desktop.height, width, height);
+  zoom.layout(desktop.width, desktop.height, width, height);
+  keyboardView.layout(desktop.width, desktop.height, width, height, sessionViewport(window).occlusion);
+  const transform = { ...zoom.get(), scale: zoom.get().zoom };
   display.scale(transform.scale);
   $('display').style.transform = `translate(${transform.x}px, ${transform.y}px)`;
 } });
@@ -79,6 +82,7 @@ function click(button) {
   const state = new Guacamole.Mouse.State();
   Object.assign(state, remoteCursor);
   display.showCursor(true);
+  inputAnchor = { ...remoteCursor };
   state[button] = true; client.sendMouseState(state);
   state[button] = false; client.sendMouseState(state);
 }
@@ -105,7 +109,9 @@ $('controlsButton').onclick = () => {
 const scale = sizing.fit;
 function resizeViewport() {
   // Safari's visual viewport also tracks the software keyboard and browser bars.
-  const viewport = usableViewport(window);
+  const viewport = sessionViewport(window);
+  document.documentElement.style.setProperty('--session-left', `${viewport.left}px`);
+  document.documentElement.style.setProperty('--session-top', `${viewport.top}px`);
   document.documentElement.style.setProperty('--session-width', `${viewport.width}px`);
   document.documentElement.style.setProperty('--session-height', `${viewport.height}px`);
   sizing.resize();
@@ -113,6 +119,7 @@ function resizeViewport() {
 new ResizeObserver(() => sizing.resize()).observe($('viewport'));
 window.addEventListener('resize', resizeViewport);
 window.visualViewport?.addEventListener('resize', resizeViewport);
+window.visualViewport?.addEventListener('scroll', resizeViewport);
 window.addEventListener('pageshow', resizeViewport);
 // iOS can report the old visual viewport during the first orientation event.
 const orientationResize = () => { resizeViewport(); setTimeout(resizeViewport, 350); setTimeout(resizeViewport, 750); };
@@ -127,7 +134,7 @@ function end(message) {
     if (p) try { store.save({ ...p, zoom: zoom.get().zoom }, activeProfile); } catch { /* Session cleanup must always finish. */ }
   }
   activeProfile = -1;
-  generation++; busy = false; connected = false; sizing.reset(); zoom.reset(); remoteCursor = null;
+  generation++; busy = false; connected = false; sizing.reset(); keyboardView.reset(); zoom.reset(); remoteCursor = inputAnchor = null;
   $('sessionControls').hidden = true; $('controlsButton').setAttribute('aria-expanded', 'false');
   const old = client; client = null; old?.disconnect();
   $('display').replaceChildren(); $('session').hidden = true; $('home').hidden = false;
@@ -175,9 +182,11 @@ async function connect(event) {
       const state = new Guacamole.Mouse.State(e.state);
       Object.assign(state, e.state, remotePoint({ x: pointer.clientX, y: pointer.clientY }, rect, display.getScale(), displaySize(display).width, displaySize(display).height));
       remoteCursor = { x: state.x, y: state.y };
+      if (state.left || state.right) inputAnchor = { ...remoteCursor };
       current.sendMouseState(state); pointer = null;
     } else {
       remoteCursor = { x: e.state.x / display.getScale(), y: e.state.y / display.getScale() };
+      if (e.state.left || e.state.right) inputAnchor = { ...remoteCursor };
       current.sendMouseState(e.state, true);
     } } };
     new Guacamole.Mouse(display.getElement()).onEach(['mousedown', 'mousemove', 'mouseup'], sendMouse);
@@ -218,7 +227,21 @@ function type(text) {
 }
 const sentinel = '\u200b';
 const resetKeyboard = () => { $('keyboard').value = sentinel; };
-$('keyboard').addEventListener('focus', resetKeyboard);
+$('keyboard').addEventListener('focus', () => {
+  keyboardView.begin(inputAnchor ?? remoteCursor); resetKeyboard(); resizeViewport();
+});
+$('keyboard').addEventListener('blur', () => {
+  $('keyboard').classList.remove('visible'); keyboardView.dismiss(); resizeViewport();
+});
+// These local controls retain textarea focus and never send remote mouse input.
+for (const [id, dx, dy] of [['panUp', 0, 80], ['panDown', 0, -80], ['panLeft', 80, 0], ['panRight', -80, 0]]) {
+  $(id).addEventListener('pointerdown', event => {
+    event.preventDefault(); zoom.pan(dx, dy); renderZoom();
+  });
+}
+$('keyboardDone').addEventListener('pointerdown', event => {
+  event.preventDefault(); $('keyboard').classList.remove('visible'); $('keyboard').blur(); resizeViewport();
+});
 let composing = false;
 $('keyboard').addEventListener('compositionstart', () => composing = true);
 $('keyboard').addEventListener('compositionend', event => { composing = false; type(event.data); resetKeyboard(); });

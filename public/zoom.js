@@ -43,6 +43,7 @@ export function zoomState() {
     },
     fit() { zoom = fit(width, height, viewWidth, viewHeight); x = y = 0; return clamp(); },
     reset() { zoom = 1; x = y = 0; return clamp(); },
+    restore(state) { ({ zoom, x, y } = state); return clamp(); },
     get() { return { zoom, x, y }; }
   };
 }

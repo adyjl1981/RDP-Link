@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { profile, displaySize, profileStore } from '../public/model.js';
 import { canConnect } from '../public/connection-policy.js';
-import { viewportController, usableViewport } from '../public/viewport.js';
+import { viewportController, usableViewport, sessionViewport, keyboardViewport } from '../public/viewport.js';
 import { zoomState, installGestures, remotePoint } from '../public/zoom.js';
 
 test('rotation while connecting and connected preserves the ticket, client and tunnel; explicit disconnect still works', async () => {
@@ -31,7 +31,7 @@ test('rotation while connecting and connected preserves the ticket, client and t
   }
   class Mouse { onEach() {} }
   Mouse.State = class {};
-  const context = vm.createContext({ profile, displaySize, profileStore, canConnect, viewportController, usableViewport, zoomState, installGestures, remotePoint,
+  const context = vm.createContext({ profile, displaySize, profileStore, canConnect, viewportController, usableViewport, sessionViewport, keyboardViewport, zoomState, installGestures, remotePoint,
     Guacamole: { Client, Mouse, WebSocketTunnel: class { constructor() { tunnels++; } } },
     document: { getElementById: node, activeElement: { blur() {} }, documentElement: { style: { setProperty() {} } } },
     window: { innerHeight: 390, visualViewport: { height: 390, addEventListener: (name, fn) => listeners.set('visual:' + name, fn) }, addEventListener: (name, fn) => listeners.set(name, fn) },
@@ -146,6 +146,39 @@ test('rotation while connecting and connected preserves the ticket, client and t
   fire('touchstart', [[100, 100], [200, 100]]); fire('touchmove', [[100, 76], [200, 76]]); fire('touchend', [], [[100, 76]]);
   assert.deepEqual(mouse.slice(before).map(s => s.up), [true, false]);
   assert.equal(node('sessionNotice').hidden, true);
+  // Real keyboard callbacks share the same client and render the latest state,
+  // including a queued pinch frame and Safari offset changes during dismissal.
+  const beforeKeyboard = node('display').style.transform;
+  windowForKeyboard();
+  function windowForKeyboard() {
+    const win = vm.runInContext('window', context);
+    win.innerWidth = 390; win.innerHeight = 650;
+    win.visualViewport.width = 390; win.visualViewport.height = 650;
+    node('viewport').clientWidth = 390; node('viewport').clientHeight = 650;
+    listeners.get('resize')();
+    const saved = node('display').style.transform;
+    node('keyboard').handlers.get('focus')();
+    win.visualViewport.height = 260; win.visualViewport.offsetTop = 100;
+    node('viewport').clientHeight = 178;
+    listeners.get('visual:resize')(); listeners.get('observer')(); flush();
+    assert.notEqual(node('display').style.transform, saved);
+    let prevented = false;
+    node('panUp').handlers.get('pointerdown')({ preventDefault() { prevented = true; } });
+    flush(); assert.equal(prevented, true);
+    node('keyboard').handlers.get('blur')();
+    win.visualViewport.height = 650; win.visualViewport.offsetTop = 0;
+    node('viewport').clientHeight = 650;
+    listeners.get('visual:resize')(); listeners.get('visual:scroll')(); flush();
+    assert.equal(node('display').style.transform, saved);
+    assert.equal(currentScale, 2);
+    assert.equal(clients.length, 1); assert.equal(tunnels, 1);
+    assert.equal(clients[0].disconnects, 0); assert.deepEqual(clients[0].requests, []);
+    win.innerWidth = 844; win.innerHeight = 390;
+    win.visualViewport.width = 844; win.visualViewport.height = 390;
+    node('viewport').clientWidth = 844; node('viewport').clientHeight = 310;
+    listeners.get('resize')();
+  }
+  assert.equal(node('display').style.transform, beforeKeyboard);
   node('controlsButton').onclick(); node('fitButton').onclick(); flush();
   assert.equal(clients.length, 1); assert.equal(tunnels, 1); assert.equal(clients[0].disconnects, 0);
   assert.deepEqual(clients[0].requests, []);

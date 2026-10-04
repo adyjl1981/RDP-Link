@@ -27,3 +27,11 @@ input:focus,select:focus,button:focus-visible{outline:2px solid #80bfff;outline-
 @media(orientation:landscape) and (max-height:500px){main{max-width:640px;padding-top:12px}h1{font-size:28px}}
 
 #sessionNotice{position:absolute;z-index:4;top:calc(env(safe-area-inset-top) + 12px);left:12px;max-width:calc(100% - 80px);margin:0;padding:10px 14px;background:#182337ed;border-radius:10px;font-size:14px}
+
+/* Position in Safari's visible region; existing padding measures safe areas. */
+#session{left:var(--session-left,0px);top:var(--session-top,0px)}
+#keyboardPan{display:none;flex-shrink:0;align-items:center;justify-content:center;gap:4px;background:#182337;font-size:11px}
+#session:has(#keyboard.visible) #keyboardPan{display:flex}
+#keyboardPan button{min-width:44px;min-height:44px;padding:4px 8px;background:#26344b;color:#d6e4ff;touch-action:manipulation}
+#session:has(#keyboard.visible){padding-bottom:0}
+#keyboard.visible{height:38px;min-height:38px;padding:6px 12px}
