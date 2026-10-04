@@ -1,3 +1,4 @@
+import { installKeyboard } from '../public/keyboard.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -31,9 +32,9 @@ test('rotation while connecting and connected preserves the ticket, client and t
   }
   class Mouse { onEach() {} }
   Mouse.State = class {};
-  const context = vm.createContext({ profile, displaySize, profileStore, canConnect, viewportController, usableViewport, sessionViewport, keyboardViewport, zoomState, installGestures, remotePoint,
+  const context = vm.createContext({ installKeyboard, profile, displaySize, profileStore, canConnect, viewportController, usableViewport, sessionViewport, keyboardViewport, zoomState, installGestures, remotePoint,
     Guacamole: { Client, Mouse, WebSocketTunnel: class { constructor() { tunnels++; } } },
-    document: { getElementById: node, activeElement: { blur() {} }, documentElement: { style: { setProperty() {} } } },
+    document: { addEventListener: (name, fn) => listeners.set('document:' + name, fn), getElementById: node, activeElement: { blur() {} }, documentElement: { style: { setProperty() {} } } },
     window: { innerHeight: 390, visualViewport: { height: 390, addEventListener: (name, fn) => listeners.set('visual:' + name, fn) }, addEventListener: (name, fn) => listeners.set(name, fn) },
     location: { protocol: 'http:', hostname: '192.168.1.50', host: '192.168.1.50:8080' },
     localStorage: { getItem: () => null, setItem(_key, value) { stored = value; } }, Option: class {},
@@ -157,7 +158,11 @@ test('rotation while connecting and connected preserves the ticket, client and t
     node('viewport').clientWidth = 390; node('viewport').clientHeight = 650;
     listeners.get('resize')();
     const saved = node('display').style.transform;
+    node('keyboard').value = 'old preview';
+    node('sessionControls').hidden = false;
     node('keyboard').handlers.get('focus')();
+    assert.equal(node('keyboard').value, '');
+    assert.equal(node('sessionControls').hidden, true);
     win.visualViewport.height = 260; win.visualViewport.offsetTop = 100;
     node('viewport').clientHeight = 178;
     listeners.get('visual:resize')(); listeners.get('observer')(); flush();

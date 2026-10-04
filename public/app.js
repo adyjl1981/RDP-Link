@@ -1,4 +1,5 @@
 import Guacamole from '/guacamole.js';
+import { installKeyboard } from './keyboard.js';
 import { profile, displaySize, profileStore } from './model.js';
 import { canConnect } from './connection-policy.js';
 import { viewportController, sessionViewport, keyboardViewport } from './viewport.js';
@@ -102,6 +103,7 @@ function wheel(_dx, dy) {
 }
 $('fitButton').onclick = () => { zoom.fit(); sizing.fit(); };
 $('controlsButton').onclick = () => {
+  if ($('keyboard').classList.contains('visible')) return;
   const expanded = $('sessionControls').hidden;
   $('sessionControls').hidden = !expanded;
   $('controlsButton').setAttribute('aria-expanded', String(expanded));
@@ -138,7 +140,7 @@ function end(message) {
   $('sessionControls').hidden = true; $('controlsButton').setAttribute('aria-expanded', 'false');
   const old = client; client = null; old?.disconnect();
   $('display').replaceChildren(); $('session').hidden = true; $('home').hidden = false;
-  $('keyboard').classList.remove('visible'); $('keyboard').value = ''; $('keyboard').blur();
+  $('keyboard').classList.remove('visible'); keyboardInput.clear(); $('keyboard').blur();
   $('connectButton').disabled = false; status(message);
 }
 async function connect(event) {
@@ -214,7 +216,7 @@ $('connectButton').onclick = connect;
 form.onsubmit = connect;
 $('disconnect').onclick = () => end('Disconnected. Enter credentials to reconnect.');
 // A cached page may resume with its existing client; do not discard it on suspend.
-window.addEventListener('pagehide', event => { if (!event.persisted) end('Disconnected'); });
+window.addEventListener('pagehide', event => { keyboardInput.clear(); if (!event.persisted) end('Disconnected'); });
 window.addEventListener('offline', () => end('Network lost. Enter credentials to reconnect.'));
 const key = value => { if (!client) return; client.sendKeyEvent(1, value); client.sendKeyEvent(0, value); };
 $('keyboardButton').onclick = () => { $('keyboard').classList.toggle('visible'); if ($('keyboard').classList.contains('visible')) $('keyboard').focus(); else $('keyboard').blur(); resizeViewport(); };
@@ -225,13 +227,21 @@ function type(text) {
     key(char === '\n' ? 0xff0d : cp <= 255 ? cp : 0x01000000 | cp);
   }
 }
-const sentinel = '\u200b';
-const resetKeyboard = () => { $('keyboard').value = sentinel; };
+const keyboardInput = installKeyboard($('keyboard'), { key, type });
+document.addEventListener('visibilitychange', () => { if (document.hidden) keyboardInput.clear(); });
+$('clearKeyboard').addEventListener('pointerdown', event => { event.preventDefault(); keyboardInput.clear(); });
+let hiddenInput = false;
+$('privacyKeyboard').addEventListener('pointerdown', event => {
+  event.preventDefault(); hiddenInput = !hiddenInput; keyboardInput.setHidden(hiddenInput);
+  $('privacyKeyboard').setAttribute('aria-pressed', String(hiddenInput));
+  $('privacyKeyboard').textContent = hiddenInput ? 'Hidden' : 'Hide';
+});
 $('keyboard').addEventListener('focus', () => {
-  keyboardView.begin(inputAnchor ?? remoteCursor); resetKeyboard(); resizeViewport();
+  keyboardView.begin(inputAnchor ?? remoteCursor); keyboardInput.clear();
+  $('sessionControls').hidden = true; $('controlsButton').setAttribute('aria-expanded', 'false'); resizeViewport();
 });
 $('keyboard').addEventListener('blur', () => {
-  $('keyboard').classList.remove('visible'); keyboardView.dismiss(); resizeViewport();
+  $('keyboard').classList.remove('visible'); keyboardInput.clear(); keyboardView.dismiss(); resizeViewport();
 });
 // These local controls retain textarea focus and never send remote mouse input.
 for (const [id, dx, dy] of [['panUp', 0, 80], ['panDown', 0, -80], ['panLeft', 80, 0], ['panRight', -80, 0]]) {
@@ -241,19 +251,6 @@ for (const [id, dx, dy] of [['panUp', 0, 80], ['panDown', 0, -80], ['panLeft', 8
 }
 $('keyboardDone').addEventListener('pointerdown', event => {
   event.preventDefault(); $('keyboard').classList.remove('visible'); $('keyboard').blur(); resizeViewport();
-});
-let composing = false;
-$('keyboard').addEventListener('compositionstart', () => composing = true);
-$('keyboard').addEventListener('compositionend', event => { composing = false; type(event.data); resetKeyboard(); });
-$('keyboard').addEventListener('input', event => {
-  if (composing || event.isComposing) return;
-  if (event.inputType.startsWith('delete')) key(0xff08);
-  else type((event.data ?? $('keyboard').value).replaceAll(sentinel, ''));
-  resetKeyboard();
-});
-$('keyboard').addEventListener('keydown', event => {
-  const keys = { Backspace: 0xff08, Enter: 0xff0d, Tab: 0xff09, Escape: 0xff1b, ArrowLeft: 0xff51, ArrowUp: 0xff52, ArrowRight: 0xff53, ArrowDown: 0xff54 };
-  if (keys[event.key]) { event.preventDefault(); key(keys[event.key]); }
 });
 $('clipboardButton').onclick = () => $('clipboard').showModal();
 $('sendClipboard').onclick = () => {

@@ -35,3 +35,10 @@ input:focus,select:focus,button:focus-visible{outline:2px solid #80bfff;outline-
 #keyboardPan button{min-width:44px;min-height:44px;padding:4px 8px;background:#26344b;color:#d6e4ff;touch-action:manipulation}
 #session:has(#keyboard.visible){padding-bottom:0}
 #keyboard.visible{height:38px;min-height:38px;padding:6px 12px}
+
+#keyboard{white-space:pre;overflow-x:auto;overflow-y:hidden;resize:none}
+#keyboard.private{-webkit-text-security:disc}
+#keyboardPrivacy{display:none;flex-shrink:0;background:#182337;color:#aebbd1;padding:3px 8px;font-size:10px}
+#session:has(#keyboard.visible) #keyboardPrivacy{display:block}
+#session:has(#keyboard.visible) #sessionControls,#session:has(#keyboard.visible) #controlsButton{display:none}
+#keyboardPan{flex-wrap:wrap}

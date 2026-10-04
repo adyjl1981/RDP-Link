@@ -11,6 +11,7 @@ const tickets = new Map(); let sessions = 0;
 const files = new Map([
   ['/', ['public/index.html', 'text/html']], ['/app.js', ['public/app.js', 'text/javascript']],
   ['/viewport.js', ['public/viewport.js', 'text/javascript']],
+  ['/keyboard.js', ['public/keyboard.js', 'text/javascript']],
   ['/zoom.js', ['public/zoom.js', 'text/javascript']],
   ['/model.js', ['public/model.js', 'text/javascript']], ['/style.css', ['public/style.css', 'text/css']],
   ['/connection-policy.js', ['public/connection-policy.js', 'text/javascript']],
