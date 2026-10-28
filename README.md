@@ -14,6 +14,51 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
+### Desktop control panel
+
+Run `./control_panel.py` from this checkout as your normal desktop user. It needs
+Python 3 with Tk (`sudo apt install python3-tk` if missing), Docker access, and
+PolicyKit (`pkexec`) for administrator actions. No extra Python packages are used.
+The window does not need to stay open for RDP-Link to run.
+
+The panel shows the boot service's installed/running/enabled state, actual gateway
+binding, container status, and Tailscale connection and Serve status when installed.
+Click Refresh to update. Start/Stop control the existing service (or Compose directly
+when no service exists). Enable/Disable at boot change only the boot preference;
+use Stop to stop a running stack. Docker's existing restart policies still apply.
+An existing service must point to this checkout before the panel will control it.
+
+If no boot service exists, Install boot service opens `setup.sh` in a terminal:
+answer its existing `[y/N]` prompt and authenticate, then click Refresh. The existing
+service on this Ubuntu machine can be controlled without replacing it.
+
+Choose an access mode and click Apply access choice:
+
+- **LAN only:** enter an assigned private IPv4 address. The gateway binds specifically
+  to that address on port 8080, trusts its HTTP browser origin, and removes the exact
+  RDP-Link Tailscale HTTPS Serve mapping if present. Use a stable DHCP reservation.
+  This controls the gateway binding and Serve route, not firewall/router rules or
+  other proxies. LAN traffic uses HTTP; use only on a trusted private network.
+- **Outside the LAN:** install/sign into Tailscale on both devices first. The panel
+  binds the gateway to loopback, trusts this machine's Tailscale HTTPS URL, and
+  configures persistent private Serve forwarding to `http://127.0.0.1:8080`.
+  This is access through your tailnet, not public internet/Funnel access.
+
+Applying access replaces `PUBLIC_ORIGINS` with the selected URL and updates
+`RDP_BIND_ADDRESS` in `.env` (kept private, mode 0600); it recreates the Compose
+stack and may disconnect sessions. Other `.env` settings are preserved. On Compose
+failure, the original `.env` is restored; inspect deployment status before retrying.
+Serve changes require authentication. The panel refuses to overwrite other content
+on HTTPS port 443 or modify a Funnel configuration. Other Serve routes remain alone.
+Custom reverse proxies and additional browser origins need manual configuration.
+Changing access and starting the stack are separate from the boot preference.
+
+Backend regression checks (mocked, no deployment changes):
+
+```sh
+python3 test/test-control-panel.py
+```
+
 ### Optional start at boot (Ubuntu/systemd)
 
 After completing the Docker/.env setup above, run as the account that runs Docker:
@@ -72,7 +117,7 @@ rdp.example.com {
 }
 ```
 
-Set `PUBLIC_ORIGINS=https://rdp.example.com` exactly, without a trailing slash. Use a private network/VPN for access where possible. Compose publishes the gateway on the LAN on port 8080; `guacd` has no published port. Do not expose guacd directly. HTTPS protects the iPhone-to-gateway connection; RDP handles gateway-to-desktop transport separately. Desktop destinations must exactly match the `RDP_TARGETS` allowlist.
+Set `PUBLIC_ORIGINS=https://rdp.example.com` exactly, without a trailing slash. Use a private network/VPN for access where possible. Compose publishes the gateway on loopback port 8080 by default; `guacd` has no published port. Do not expose guacd directly. HTTPS protects the iPhone-to-gateway connection; RDP handles gateway-to-desktop transport separately. Desktop destinations must exactly match the `RDP_TARGETS` allowlist.
 
 For local development, `npm ci`, then supply `RDP_TARGETS` and run `npm start` with an existing guacd on localhost:4822. Plain HTTP is allowed on `localhost`, `127.0.0.1`, and RFC1918 private LAN addresses (`10.x.x.x`, `172.16–31.x.x`, and `192.168.x.x`), including from an iPhone. Include the exact LAN URL in `PUBLIC_ORIGINS`, such as `http://192.168.1.50:8080`. Normal/public addresses require HTTPS.
 
