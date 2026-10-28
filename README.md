@@ -3,8 +3,7 @@
 RDP-Link is a web remote-desktop client for Ubuntu, designed for use in iPhone
 Safari. A Docker Compose stack runs a Node gateway and Apache Guacamole's guacd;
 a small Ubuntu control panel manages the stack, optional boot startup and access.
-This repository contains the web app. The native iOS project is separate.
-
+This repository contains the web app. 
 ## Installation and user manual
 
 **Start with the [RDP-Link user manual](USER_MANUAL.md).** It walks through:
