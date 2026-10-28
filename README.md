@@ -21,6 +21,21 @@ Python 3 with Tk (`sudo apt install python3-tk` if missing), Docker access, and
 PolicyKit (`pkexec`) for administrator actions. No extra Python packages are used.
 The window does not need to stay open for RDP-Link to run.
 
+Install an icon on your desktop and in the application menu with
+`./install_desktop.py` (no sudo). Search for **RDP-Link** in Ubuntu's app menu.
+The installer uses your configured desktop folder and XDG application directory;
+rerunning it updates the same two launchers. If Ubuntu asks, right-click the desktop
+icon and choose **Allow Launching**. Rerun after moving the checkout.
+To uninstall the shortcuts, delete `org.rdp-link.ControlPanel.desktop` from your
+desktop and from `~/.local/share/applications` (or your custom XDG data directory).
+
+The prominent **Outside LAN** line reports whether a RDP-Link Tailscale Serve route
+is enabled, disabled, configured but disconnected, or unknown. It identifies public
+Funnel if already configured. This reports configuration and Tailscale connection
+state; it does not prove connectivity from another device or that the gateway is
+healthy. Container status is shown separately. Click Refresh after external changes.
+Other proxies, router forwarding and direct Tailscale-IP access are not detected.
+
 The panel shows the boot service's installed/running/enabled state, actual gateway
 binding, container status, and Tailscale connection and Serve status when installed.
 Click Refresh to update. Start/Stop control the existing service (or Compose directly

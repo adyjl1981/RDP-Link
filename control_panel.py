@@ -72,6 +72,23 @@ def serve_ownership(config, dns):
     return entry is not None
 
 
+def outside_access_status(state, config):
+    """Describe actual Serve configuration, without claiming a remote connection test."""
+    routes = []
+    for endpoint, web in config.get('Web', {}).items():
+        for path, handler in web.get('Handlers', {}).items():
+            if handler.get('Proxy') == TARGET:
+                routes.append((endpoint, path))
+    if not routes:
+        return 'Outside LAN: Disabled — no RDP-Link Tailscale Serve route'
+    public = any(config.get('AllowFunnel', {}).get(endpoint, False) for endpoint, _ in routes)
+    if state.get('BackendState') != 'Running':
+        return 'Outside LAN: Configured, but Tailscale is disconnected'
+    urls = ', '.join('https://' + endpoint.removesuffix(':443') + path for endpoint, path in routes)
+    kind = 'public Funnel' if public else 'private Tailscale'
+    return f'Outside LAN: Enabled ({kind}) — {urls}'
+
+
 def env_updated(text, updates):
     lines = text.splitlines()
     for key, value in updates.items():
@@ -145,8 +162,8 @@ class Panel:
     def __init__(self, root):
         self.root = root
         root.title('RDP-Link')
-        root.geometry('660x700')
-        root.minsize(640, 700)
+        root.geometry('660x730')
+        root.minsize(640, 730)
         self.events = queue.Queue()
         self.busy = False
         self.buttons = []
@@ -154,6 +171,9 @@ class Panel:
         frame.pack(fill='both', expand=True)
         ttk.Label(frame, text='RDP-Link', font=('', 22, 'bold')).pack(anchor='w')
         ttk.Label(frame, text='Web remote desktop • Ubuntu control panel').pack(anchor='w', pady=(0, 16))
+        self.outside_status = tk.StringVar(value='Outside LAN: Checking…')
+        ttk.Label(frame, textvariable=self.outside_status, font=('', 10, 'bold'),
+                  wraplength=610).pack(anchor='w', pady=(0, 10))
         self.status = tk.StringVar(value='Reading status…')
         status_box = ScrolledText(frame, height=6, width=64, wrap='word', font=('', 10))
         status_box.pack(fill='x')
@@ -227,6 +247,7 @@ class Panel:
                 messagebox.showerror('RDP-Link', result)
             elif isinstance(result, dict):
                 self.status.set(result['status'])
+                self.outside_status.set(result['outside'])
                 if not self.ip.get():
                     self.ip.set(result['ip'])
             else:
@@ -245,18 +266,22 @@ class Panel:
                                                     '{{.Service}}: {{.Status}}') or 'Stopped'))
             except Exception:
                 summary.append('Containers: unavailable — check Docker access.')
+            outside = 'Outside LAN: Disabled — Tailscale is not installed'
             if shutil.which('tailscale'):
                 try:
                     state = json.loads(run('tailscale', 'status', '--json'))
+                    config = json.loads(run('tailscale', 'serve', 'status', '--json'))
+                    outside = outside_access_status(state, config)
                     summary.append('Tailscale: ' + state.get('BackendState', 'unknown'))
                     summary.append(run('tailscale', 'serve', 'status') or 'Serve: not configured')
                 except Exception:
+                    outside = 'Outside LAN: Unknown — unable to read Tailscale status'
                     summary.append('Tailscale: installed; status unavailable')
             else:
                 summary.append('Tailscale: not installed')
             addresses = run('hostname', '-I', check=False).split()
             ips = [ip for ip in addresses if re.match(r'^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)', ip)]
-            return {'status': '\n'.join(summary), 'ip': ips[0] if ips else ''}
+            return {'status': '\n'.join(summary), 'ip': ips[0] if ips else '', 'outside': outside}
         self.work(inspect)
 
     def service(self, action):

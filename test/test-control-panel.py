@@ -79,6 +79,18 @@ class ControlPanelTests(unittest.TestCase):
                 self.assertIn('RDP_BIND_ADDRESS=127.0.0.1', (root / '.env').read_text())
                 admin.assert_called_once_with('tailscale', 'serve', '--bg', '--https=443', panel.TARGET)
 
+    def test_outside_lan_status(self):
+        state = {'BackendState': 'Running'}
+        config = {'Web': {'pc.ts.net:443': {'Handlers': {'/': {'Proxy': panel.TARGET}}}}}
+        self.assertIn('Enabled (private Tailscale)', panel.outside_access_status(state, config))
+        self.assertIn('https://pc.ts.net/', panel.outside_access_status(state, config))
+        self.assertIn('Disabled', panel.outside_access_status(state, {}))
+        self.assertIn('disconnected', panel.outside_access_status({}, config))
+        config['AllowFunnel'] = {'pc.ts.net:443': True}
+        self.assertIn('public Funnel', panel.outside_access_status(state, config))
+        unrelated = {'Web': {'pc.ts.net:443': {'Handlers': {'/': {'Proxy': 'http://localhost:3000'}}}}}
+        self.assertIn('Disabled', panel.outside_access_status(state, unrelated))
+
     def test_service_checkout_guard(self):
         with self.assertRaises(RuntimeError):
             panel.check_service_repo({'LoadState': 'loaded', 'WorkingDirectory': '/other'})
