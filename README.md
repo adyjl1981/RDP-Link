@@ -14,6 +14,56 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
+### Optional start at boot (Ubuntu/systemd)
+
+After completing the Docker/.env setup above, run as the account that runs Docker:
+
+```sh
+./setup.sh
+```
+
+The prompt is `Start RDP-Link automatically when this machine boots? [y/N]`.
+Enter or any answer other than yes leaves the existing service and manual-start
+behavior unchanged. Explicitly answering yes validates Docker access and the
+Compose configuration, installs `/etc/systemd/system/rdp-link.service`, reloads
+systemd, and enables and starts the service. Administrative access via sudo is
+required for installation. Docker must already be installed as the system
+`docker.service`; the installing account must have Docker access. Run this from
+a trusted checkout, since the service uses that checkout's Compose file.
+
+The unit detects the repository's absolute path and installing user (`SUDO_USER`
+when invoked through sudo). It waits for Docker and network-online, starts with
+`docker compose up -d`, and stops with `docker compose stop`, preserving containers
+and volumes. An active oneshot service shows `active (exited)`. Rerunning setup
+updates the same managed unit; it refuses to overwrite an unrelated existing
+unit. If moving the checkout, rerun setup from its new location.
+
+Inspect the generated unit without installing or starting anything:
+
+```sh
+./setup.sh --print-unit
+systemctl status rdp-link.service
+```
+
+To enable again later, run `./setup.sh` and answer yes. To disable and remove the
+managed boot service (also stops the stack):
+
+```sh
+./setup.sh --disable
+```
+
+Then use `docker compose up -d` and `docker compose stop` manually as before.
+Alternatively, `sudo systemctl disable --now rdp-link.service` keeps the unit
+file for later `sudo systemctl enable --now rdp-link.service`.
+The existing Compose `restart: unless-stopped` policies remain unchanged: Docker
+can restart previously running containers independently of this optional unit.
+Disabling the unit alone without stopping the containers does not disable those
+Docker restart policies.
+
+Tailscale Serve is separate from starting this Docker stack. Its background
+(`--bg`) configuration persists across reboots; this script does not configure
+or change it. Check it independently with `tailscale serve status`.
+
 Put an HTTPS reverse proxy in front of `127.0.0.1:8080`, with WebSocket forwarding. For example, this Caddy configuration automatically obtains a certificate for a domain pointing to your Ubuntu machine:
 
 ```caddy
@@ -68,6 +118,13 @@ Certificate validation is enabled by default. For a known desktop with a self-si
 The gateway holds credentials only during the connection handshake, and uses single-use tickets expiring after ten seconds. JavaScript strings cannot be reliably zeroed in memory. Profiles remain on the device until forgotten. There is a maximum of four pending/active sessions; this is a personal MVP, not a multi-user public service.
 
 ## Verification
+
+Installer checks (isolated mocks; no host services changed):
+
+```sh
+bash -n setup.sh
+python3 test/test-boot-setup.py
+```
 
 ```sh
 npm test
