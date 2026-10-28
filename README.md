@@ -6,6 +6,26 @@ a small Ubuntu control panel manages the stack, optional boot startup and access
 This repository contains the web app. 
 ## Installation and user manual
 
+From a complete checkout, open an Ubuntu terminal as your normal desktop user:
+
+```sh
+./install.py
+```
+
+The guided installer offers missing desktop dependencies, Docker/Compose installation,
+private configuration, a build/start, desktop/app-menu icons, LAN or private Tailscale
+access, and optional boot startup. It preserves existing settings by default and
+asks before administrator changes. It uses Ubuntu's Docker packages for a fresh
+installation and preserves an existing compatible Docker installation. Run
+`./install.py --check` for a read-only prerequisite check. Python 3 must already be
+available (standard on Ubuntu Desktop); install it with `sudo apt install python3`
+if necessary.
+
+You still enable Ubuntu Remote Desktop in Settings and complete Tailscale sign-in,
+HTTPS consent and phone setup yourself. If prompted to sign out after Docker group
+setup, sign out/in and rerun the same script. No RDP passwords are requested by the
+installer. See the manual for manual installation and recovery steps.
+
 **Start with the [RDP-Link user manual](USER_MANUAL.md).** It walks through:
 
 - Installing Docker, Compose and the desktop prerequisites.
@@ -38,6 +58,7 @@ use a suitable Node environment-file option. See the
 npm test
 npm audit
 bash -n setup.sh
+python3 -B test/test-install.py
 python3 -B test/test-boot-setup.py
 python3 -B test/test-control-panel.py
 python3 -B test/test-desktop-launcher.py

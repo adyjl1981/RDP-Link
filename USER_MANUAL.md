@@ -8,6 +8,69 @@ All network addresses and names in this manual are fictional examples or
 placeholders. Replace them with your own values. No credentials are supplied.
 Run terminal commands on the Ubuntu machine unless a step says otherwise.
 
+## Guided installation: start here
+
+After obtaining the web repository (see [Download RDP-Link](#3-download-rdp-link)),
+open a terminal in its folder and run as your normal desktop account:
+
+```sh
+./install.py
+```
+
+Do not prefix this command with sudo. It requests administrator access only for
+individual steps. Python 3 is required to launch it; if missing, install it with
+`sudo apt install python3`. The rest of this manual also provides the equivalent
+manual setup steps if you prefer them.
+
+The installer guides you through these steps:
+
+1. Offer missing Tk, authentication, terminal, download and launcher tools.
+2. Check Docker/Compose. For a fresh installation, offer Ubuntu's `docker.io` and
+   `docker-compose-v2` packages. Existing compatible installations are reused; the
+   Compose package is matched to the installed Docker package family. APT package
+   removal is forbidden. Conflicting/unknown installations need manual review.
+3. Check access to the local system Docker daemon. Remote, rootless and Docker
+   Desktop contexts are refused. Offer Docker group membership if needed. Membership
+   grants extensive control over Ubuntu; accept only for a trusted account. If
+   added, **sign out completely, sign back in and rerun the installer**.
+4. Create a private `.env`, or keep an existing one. Editing an existing destination
+   is opt-in. New setup asks for the desktop hostname and port, and separately asks
+   whether to disable RDP certificate verification (default no). Other settings
+   are preserved. The installer does not ask for an RDP username or password.
+5. Offer desktop and app-menu icons, then ask whether to build/start the containers.
+   Declining the build leaves containers unchanged; earlier accepted steps remain.
+6. Offer access choices: **Enter keeps existing access**, **1 chooses LAN**, and
+   **2 chooses private Tailscale HTTPS**. A new install with Enter stays local-only.
+   Choosing a mode replaces the gateway binding/trusted browser origins and can
+   disconnect sessions. For Tailscale, offer its official Linux installer if missing,
+   show sign-in/HTTPS-consent links in the terminal, and refuse conflicting Serve
+   or Funnel configurations. No public Funnel or router rules are created.
+7. Offer boot service setup. The existing `Start RDP-Link automatically when this
+   machine boots? [y/N]` prompt defaults to no. An existing service for this checkout
+   is kept; enabling/starting it requires a separate explicit yes.
+
+Before the destination step, use **Settings → System → Remote Desktop** to enable
+your chosen sharing/login mode and note the displayed port. The script cannot
+complete those desktop choices, Tailscale account/HTTPS approvals, or phone setup
+for you. See [section 4](#4-prepare-ubuntu-remote-desktop) and
+[section 8](#8-set-up-tailscale-for-access-away-from-home).
+
+Package installation uses configured Ubuntu repositories. If an expected package
+is unavailable, review your release/repositories or use the manual installation
+route below. The manual's alternative Docker instructions use Docker's own package
+repository; **do not mix Docker package families** on an already configured system.
+For package details see [Ubuntu's Compose package](https://packages.ubuntu.com/noble/docker-compose-v2)
+and the [official Tailscale Linux guide](https://tailscale.com/docs/install/linux).
+
+For a read-only check, run `./install.py --check`. It reports prerequisites and
+whether `.env` exists without showing its contents or changing the system.
+
+Rerunning the installer resumes checks and preserves existing settings by default;
+completed package/service steps are not rolled back if a later step fails. Read
+the reported error, correct the cause and rerun. Access-change rollback follows
+the configuration section below. Running installation is not a proof of live RDP,
+phone connectivity or boot success: complete the connection and reboot checks.
+
 ## Contents
 
 1. [What you need](#1-what-you-need)
